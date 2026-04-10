@@ -1,0 +1,62 @@
+# =============================
+# ROS 2 / colcon build artifacts
+# =============================
+/build/
+/install/
+/log/
+
+# Colcon metadata and logs
+**/.colcon/
+**/COLCON_IGNORE
+
+# =============================
+# Python artifacts
+# =============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =============================
+# Editor / OS files
+# =============================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# =============================
+# Binary / temporary outputs
+# =============================
+*.log
+*.tmp
+*.bak
+*.pid
+
+# Ignore large, generated plots and experiment outputs by default
+# (uncomment if needed)
+# plots/**/*.png
+# plots/**/*.jpg
+# plots/**/*.svg
+# notebooks/**/*.html

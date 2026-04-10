@@ -1,0 +1,27 @@
+diff_drive_xbox_teleop:
+  ros__parameters:
+    joy_topic: /joy
+    cmd_vel_topic: /cmd_vel
+    actuator_topic: /actuator/command
+
+    max_linear_speed: 1.5
+    max_angular_speed: 2.0
+    scale_linear: 1.0
+    scale_angular: 1.0
+    deadzone: 0.10
+
+    slow_mode_scale: 0.30
+    normal_mode_scale: 1.00
+    turbo_mode_scale: 1.50
+
+    enable_speed_steps: true
+    speed_step: 0.10
+    min_speed_scale: 0.30
+    max_speed_scale: 1.20
+
+    watchdog_timeout_sec: 1.0
+    watchdog_period_sec: 0.5
+
+    enable_data_logging: false
+    data_log_dir: /home/rosdata
+    data_log_file: teleop_log.csv

@@ -1,0 +1,92 @@
+<?xml version="1.0" ?>
+<!--
+  Gazebo Harmonic world for the Husarion Lynx.
+
+  Extends the default empty world with sensor system plugins so that
+  IMU, NavSat (GPS), GPU LiDAR, and RGBD camera sensors all work.
+  The Sensors plugin with ogre2 is required for any camera-type sensor.
+-->
+<sdf version="1.9">
+  <world name="lynx_sensors">
+
+    <!-- Core simulation systems (same as empty.sdf) -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics" />
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands" />
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster" />
+
+    <!-- Sensor systems: Sensors handles cameras/lidar, the others handle
+         the lighter non-rendering sensors -->
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu" />
+    <plugin filename="gz-sim-navsat-system"
+            name="gz::sim::systems::NavSat" />
+
+    <!-- Spherical coordinates: Required for NavSat GPS to work.
+         Defines the real-world lat/lon that corresponds to Gazebo origin (0,0,0).
+         world_frame_orientation ENU means:
+           Gazebo +X = East, +Y = North, +Z = Up
+         heading_deg 0 means Gazebo +X axis points True East.
+         Using a location in Germany (same as agriculture.world). -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>49.9</latitude_deg>
+      <longitude_deg>8.9</longitude_deg>
+      <elevation>0</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+    <gravity>0 0 -9.8</gravity>
+    <!-- Magnetic field vector for lat 49.9, lon 8.9 (central Europe).
+         Gazebo's IMU system does NOT use this for orientation — it only
+         reports orientation relative to the world frame. This field is
+         here for completeness and for any magnetometer plugins. -->
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+
+    <!-- Lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>200 200</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
+
+
