@@ -92,6 +92,8 @@ def generate_launch_description():
             "/realsense/depth_image@sensor_msgs/msg/Image[gz.msgs.Image",
             "/realsense/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked",
             "/realsense/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+            # Ground truth pose from Gazebo physics (zero noise) for notebook drift eval
+            "/ground_truth/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
         ],
         output="screen",
     )

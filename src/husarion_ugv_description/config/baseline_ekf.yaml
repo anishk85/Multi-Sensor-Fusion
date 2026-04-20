@@ -83,9 +83,12 @@ ekf_filter_node_fusion:
     # differential=true: Gazebo IMU has no magnetometer → absolute yaw drifts 150°+ over run.
     # Using differential means EKF integrates angular rate change not absolute heading.
     # This eliminates the heading runaway seen in plots (−150° drift in 140s).
+    # ORIENTATION ROWS DISABLED: fusing both orientation (rows 4-6) AND angular_velocity
+    # (rows 10-12) double-counts the biased gyro signal. Angular velocity + linear
+    # acceleration alone are sufficient for yaw estimation in 2D mode.
     imu0: /imu/data
     imu0_config: [false, false, false,
-                  true,  true,  true,
+                  false, false, false,
                   false, false, false,
                   true,  true,  true,
                   true,  true,  true]
@@ -110,10 +113,11 @@ ekf_filter_node_fusion:
 
     # --- Process Noise (Q matrix) ---
     # STANDARD values from dual_ekf_navsat.yaml — NOT tightened for QF
+    # x,y tightened 0.05→0.025: LiDAR is reliable, filter should trust sensors more
     # vx raised 0.025→0.04: accounts for wheel slip on varied terrain
     #                                x       y       z       roll    pitch   yaw     vx      vy      vz      vroll   vpitch  vyaw    ax      ay      az
-    process_noise_covariance: [0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+    process_noise_covariance: [0.025,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.025,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
@@ -222,9 +226,11 @@ ekf_filter_node_map:
     odom3_pose_rejection_threshold: 2.0
 
     # --- IMU ---
+    # ORIENTATION ROWS DISABLED: same rationale as fusion EKF — prevent double-counting
+    # biased gyro via orientation + angular_velocity rows.
     imu0: /imu/data
     imu0_config: [false, false, false,
-                  true,  true,  true,
+                  false, false, false,
                   false, false, false,
                   true,  true,  true,
                   true,  true,  true]
@@ -280,12 +286,12 @@ ekf_filter_node_map:
 navsat_transform:
   ros__parameters:
     frequency: 10.0
-    delay: 1.5
+    delay: 3.0                   # Wait 3s for EKF to stabilize before computing GPS transform
     magnetic_declination_radians: 0.0
     yaw_offset: 0.0
     zero_altitude: true
     publish_filtered_gps: true
-    use_odometry_yaw: true   # GPS frame was computed from drifting IMU yaw (no mag in sim) → EKF yaw is more stable
+    use_odometry_yaw: false      # false: derive heading from IMU directly, not from drifting EKF yaw
     wait_for_datum: false
     broadcast_cartesian_transform: true
     broadcast_cartesian_transform_as_parent_frame: false

@@ -62,11 +62,13 @@ ekf_filter_node_odom:
     odom0_relative: false
 
     # --- IMU ---
-    # Fuse orientation (roll, pitch, yaw) + angular velocities + linear accels.
-    # Do NOT fuse position or linear velocity from IMU (it doesn't provide them).
+    # Fuse angular velocities + linear accels.
+    # ORIENTATION ROWS DISABLED: fusing both orientation (rows 4-6) AND angular_velocity
+    # (rows 10-12) double-counts the biased gyro signal. Angular velocity + linear
+    # acceleration alone are sufficient for yaw estimation in 2D mode.
     imu0: /imu/data/filtered
     imu0_config: [false, false, false,
-                  true,  true,  true,
+                  false, false, false,
                   false, false, false,
                   true,  true,  true,
                   true,  true,  true]
@@ -186,37 +188,44 @@ ekf_filter_node_map:
     odom1_pose_rejection_threshold: 2.0   # Reject GPS if > 2σ from current state (3σ allowed ±1.5m outliers)
 
 
+    # --- Visual Odometry (TWIST fusion — aligned with RQNN filtering) ---
+    # RQNN filters twist (vx: 68% reduction, wz: 61% reduction) but NOT pose.
+    # Fusing twist instead of pose ensures the QF benefit actually reaches the EKF.
     odom2: /odometry/visual/filtered
-    odom2_config: [true,  true,  false,
+    odom2_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
                    false, false, true,
-                   false, false, false,
-                   false, false, false,
                    false, false, false]
     odom2_queue_size: 10
     odom2_nodelay: true
-    odom2_differential: true
+    odom2_differential: false    # twist is already a rate — no differential needed
     odom2_relative: false
-    odom2_pose_covariance_diagonal: [0.5, 0.5, 0.5, 0.1, 0.1, 0.3]
-    odom2_twist_covariance_diagonal: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    odom2_pose_rejection_threshold: 1.5
+    # Covariances set from measured RQNN-filtered noise: vx σ=0.07→var≈0.005, wz σ=0.01→var≈0.0002
+    odom2_twist_covariance_diagonal: [0.005, 0.01, 0.01, 0.01, 0.01, 0.0002]
+    odom2_twist_rejection_threshold: 2.0
 
+    # --- LiDAR Odometry (TWIST fusion) ---
+    # RQNN gives minimal LiDAR twist reduction (2.5% vx), but twist fusion is
+    # consistent with the VO approach and avoids differential-mode pose lag.
     odom3: /odometry/lidar/filtered
-    odom3_config: [true,  true,  false,
+    odom3_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
                    false, false, true,
-                   false, false, false,
-                   false, false, false,
                    false, false, false]
     odom3_queue_size: 10
     odom3_nodelay: true
-    odom3_differential: true
+    odom3_differential: false
     odom3_relative: false
-    odom3_pose_covariance_diagonal: [0.02, 0.02, 0.02, 0.01, 0.01, 0.03]
-    odom3_twist_covariance_diagonal: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    odom3_pose_rejection_threshold: 2.0
+    # LiDAR twist noise: vx σ=0.29→var≈0.08, wz σ=0.21→var≈0.04
+    odom3_twist_covariance_diagonal: [0.08, 0.1, 0.1, 0.1, 0.1, 0.04]
+    odom3_twist_rejection_threshold: 2.0
     # --- IMU (same as EKF #1) ---
+    # ORIENTATION ROWS DISABLED: same rationale as EKF #1
     imu0: /imu/data/filtered
     imu0_config: [false, false, false,
-                  true,  true,  true,
+                  false, false, false,
                   false, false, false,
                   true,  true,  true,
                   true,  true,  true]
@@ -300,7 +309,7 @@ navsat_transform:
 
     zero_altitude: true          # Ground robot — force altitude = 0
     publish_filtered_gps: true   # Publish EKF-corrected GPS back as NavSatFix
-    use_odometry_yaw: true       # IMU has no mag in sim → yaw drifts. EKF odom yaw is more stable for GPS frame
+    use_odometry_yaw: false      # false: derive heading from IMU directly, not from drifting EKF yaw
     wait_for_datum: false        # Use first GPS fix as origin (no manual datum)
     broadcast_cartesian_transform: true
     broadcast_cartesian_transform_as_parent_frame: false
@@ -345,40 +354,44 @@ ekf_filter_node_fusion:
     odom0_pose_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
     odom0_twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
 
-    # --- Visual Odometry (position + orientation) ---
+    # --- Visual Odometry (TWIST fusion — aligned with RQNN filtering) ---
+    # Same rationale as EKF#2: fuse RQNN-filtered vx,wz instead of raw pose
     odom1: /odometry/visual/filtered
-    odom1_config: [true,  true,  false,
+    odom1_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
                    false, false, true,
-                   false, false, false,
-                   false, false, false,
                    false, false, false]
     odom1_queue_size: 10
     odom1_nodelay: true
-    odom1_differential: true
+    odom1_differential: false
     odom1_relative: false
-    odom1_pose_covariance_diagonal: [0.5, 0.5, 0.5, 0.1, 0.1, 0.3]
-    odom1_twist_covariance_diagonal: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    odom1_pose_rejection_threshold: 1.5
+    # Covariance from measured RQNN-filtered noise: vx σ=0.07→var≈0.005, wz σ=0.015→var≈0.0002
+    odom1_twist_covariance_diagonal: [0.005, 0.01, 0.01, 0.01, 0.01, 0.0002]
+    odom1_twist_rejection_threshold: 1.5
 
-    # --- LiDAR Odometry (position + orientation) ---
+    # --- LiDAR Odometry (TWIST fusion) ---
+    # RQNN gives minimal LiDAR twist reduction (2.5% vx), but twist fusion is
+    # consistent with the VO approach and avoids differential-mode pose lag.
     odom2: /odometry/lidar/filtered
-    odom2_config: [true,  true,  false,
+    odom2_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
                    false, false, true,
-                   false, false, false,
-                   false, false, false,
                    false, false, false]
     odom2_queue_size: 10
     odom2_nodelay: true
-    odom2_differential: true
+    odom2_differential: false
     odom2_relative: false
-    odom2_pose_covariance_diagonal: [0.02, 0.02, 0.02, 0.01, 0.01, 0.03]
-    odom2_twist_covariance_diagonal: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    odom2_pose_rejection_threshold: 2.0
+    # LiDAR twist noise: vx σ=0.29→var≈0.08, wz σ=0.21→var≈0.04
+    odom2_twist_covariance_diagonal: [0.08, 0.1, 0.1, 0.1, 0.1, 0.04]
+    odom2_twist_rejection_threshold: 2.0
 
     # --- IMU ---
+    # ORIENTATION ROWS DISABLED: same rationale as EKF #1 and #2
     imu0: /imu/data/filtered
     imu0_config: [false, false, false,
-                  true,  true,  true,
+                  false, false, false,
                   false, false, false,
                   true,  true,  true,
                   true,  true,  true]
@@ -400,9 +413,9 @@ ekf_filter_node_fusion:
     acceleration_gains:     [0.8,   0.0,   0.0,   0.0,   0.0,   0.9]
     deceleration_gains:    [1.0,   0.0,   0.0,   0.0,   0.0,   1.0]
 
-    # Process noise — slightly higher than basic EKF since we're fusing more sources
-    process_noise_covariance: [0.02,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.02,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+    # Process noise — tightened x,y to 0.015 since RQNN pre-filtering produces cleaner inputs
+    process_noise_covariance: [0.015,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.015,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.02,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,

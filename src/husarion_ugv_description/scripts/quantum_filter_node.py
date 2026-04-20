@@ -106,7 +106,15 @@ class RQNNFilterNode(Node):
         out.angular_velocity.x = self._filter_sample('imu_gx', msg.angular_velocity.x, 0.5)
         out.angular_velocity.y = self._filter_sample('imu_gy', msg.angular_velocity.y, 0.5)
         out.angular_velocity.z = self._filter_sample('imu_gz', msg.angular_velocity.z, 0.5)
-        out.angular_velocity_covariance = msg.angular_velocity_covariance
+        # FIX 4: Override angular velocity covariance to account for gyro bias.
+        # Gazebo publishes stddev²=0.000081 (white noise only), but actual noise
+        # including bias_stddev=0.001 is ~0.002. Without this override the EKF
+        # over-trusts the biased gyro signal, causing yaw drift.
+        out.angular_velocity_covariance = [
+            0.002, 0.0,  0.0,
+            0.0,   0.002, 0.0,
+            0.0,   0.0,  0.002
+        ]
 
         self.imu_pub.publish(out)
         self.processed['imu'] += 1
@@ -128,8 +136,17 @@ class RQNNFilterNode(Node):
         out = Odometry()
         out.header = msg.header
         out.child_frame_id = msg.child_frame_id
-        out.pose = msg.pose  # Pass pose through (EKF takes vx/wz anyway for local)
         
+        # Pass pose through UNFILTERED.
+        # With differential: true in the EKF, it computes Δpose = pose(t) - pose(t-1).
+        # RQNN smoothing of absolute pose introduces temporal lag, causing the deltas
+        # to be systematically biased (underestimate during accel, overestimate during
+        # decel). This lag accumulates into drift — verified by regression from 21m to 38m.
+        out.pose = msg.pose
+        
+        # Filter twist (velocities) — this provides genuine denoising benefit.
+        # Velocity is already a rate signal, so RQNN smoothing doesn't cause
+        # the lag-delta problem that affects pose with differential mode.
         out.twist.twist.linear.x = self._filter_sample(f'{prefix}_vx', msg.twist.twist.linear.x, 0.5)
         out.twist.twist.linear.y = msg.twist.twist.linear.y  # usually 0 for diff drive
         out.twist.twist.linear.z = msg.twist.twist.linear.z

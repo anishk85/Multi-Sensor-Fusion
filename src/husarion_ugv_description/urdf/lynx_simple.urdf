@@ -498,8 +498,8 @@
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.009</stddev>
-              <bias_mean>0.00075</bias_mean>
-              <bias_stddev>0.005</bias_stddev>
+              <bias_mean>0.0</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
               <dynamic_bias_stddev>0.00002</dynamic_bias_stddev>
               <dynamic_bias_correlation_time>400.0</dynamic_bias_correlation_time>
             </noise>
@@ -508,8 +508,8 @@
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.009</stddev>
-              <bias_mean>0.00075</bias_mean>
-              <bias_stddev>0.005</bias_stddev>
+              <bias_mean>0.0</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
               <dynamic_bias_stddev>0.00002</dynamic_bias_stddev>
               <dynamic_bias_correlation_time>400.0</dynamic_bias_correlation_time>
             </noise>
@@ -518,8 +518,8 @@
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.009</stddev>
-              <bias_mean>0.00075</bias_mean>
-              <bias_stddev>0.005</bias_stddev>
+              <bias_mean>0.0</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
               <dynamic_bias_stddev>0.00002</dynamic_bias_stddev>
               <dynamic_bias_correlation_time>400.0</dynamic_bias_correlation_time>
             </noise>
@@ -680,6 +680,22 @@
         </noise>
       </camera>
     </sensor>
+  </gazebo>
+
+  <!-- Ground Truth Odometry Publisher
+       Publishes the true model pose from Gazebo physics (zero noise) to
+       /ground_truth/odom as nav_msgs/Odometry.  Used in notebooks for
+       rigorous drift measurement instead of the GPS-noisy global EKF. -->
+  <gazebo>
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>map</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odom_topic>/ground_truth/odom</odom_topic>
+      <odom_publish_frequency>50.0</odom_publish_frequency>
+      <xyz_offset>0 0 0</xyz_offset>
+      <rpy_offset>0 0 0</rpy_offset>
+    </plugin>
   </gazebo>
 
 </robot>

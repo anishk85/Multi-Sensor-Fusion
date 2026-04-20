@@ -20,4 +20,5 @@ ros2 bag record -o $BAG_NAME \
     /odometry/visual \
     /odometry/lidar \
     /odometry/local \
-    /odometry/global
+    /odometry/global \
+    /ground_truth/odom
