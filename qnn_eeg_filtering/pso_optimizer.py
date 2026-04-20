@@ -42,6 +42,26 @@ def _rmse_zero_lag(est: np.ndarray, ref: np.ndarray) -> float:
     
     return rmse + penalty
 
+
+def _fitness_optimal_smooth(est: np.ndarray, ref: np.ndarray) -> float:
+    # 1. Base tracking (RMSE against reference/noisy signal)
+    rmse = np.sqrt(np.mean((est - ref) ** 2))
+    
+    # 2. Smoothness Penalty (First derivative roughness)
+    # This prevents tracking high-frequency noise spikes
+    roughness = np.sqrt(np.mean(np.diff(est) ** 2))
+    
+    # 3. Phase Delay Penalty (Lag against reference)
+    # We want max correlation at lag = 0
+    cc = np.correlate(est - np.mean(est), ref - np.mean(ref), mode='full')
+    lag = abs(np.argmax(cc) - (len(est) - 1))
+    
+    # Balance components: 
+    # - RMSE ensures it tracks the general shape (~0.1 - 0.5)
+    # - Roughness penalty ensures it rejects noise (* 2.0 weight)
+    # - Lag penalty ensures it doesn't fall behind (* 1.0 weight)
+    return rmse + (roughness * 2.0) + (lag * 1.0)
+
 class PSOOptimizer:
     """
     PSO to find optimal RQNN hyperparameters.
@@ -126,6 +146,8 @@ class PSOOptimizer:
                 return -_snr_improvement(reference_signal, noisy_signal, y_est)
             elif self.fitness_fn == "rmse_zero_lag":
                 return _rmse_zero_lag(y_est, reference_signal)
+            elif self.fitness_fn == "optimal_smooth":
+                return _fitness_optimal_smooth(y_est, reference_signal)
             else:
                 return _rmse(y_est, reference_signal)
         except Exception:

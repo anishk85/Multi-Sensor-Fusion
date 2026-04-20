@@ -430,6 +430,50 @@
   </gazebo>
 
   <!-- =================================================================
+       Wheel Surface Friction for Gazebo
+       mu/mu2 = 1.0 matches agriculture.world terrain friction (mu=1.0).
+       ODE contact = sqrt(mu_wheel * mu_terrain), so 1.0*1.0 = 1.0 effective.
+       Previous mu=1.5 → effective 1.22 → over-grip → jitter on tile seams.
+       kp reduced 1e6→5e4: softer contact prevents bouncing at tile edges.
+       kd increased 100→200: more damping to suppress oscillation at seams.
+       ================================================================= -->
+  <gazebo reference="fl_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+    <kp>5e4</kp>
+    <kd>200.0</kd>
+    <minDepth>0.001</minDepth>
+    <maxVel>1.0</maxVel>
+  </gazebo>
+
+  <gazebo reference="fr_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+    <kp>5e4</kp>
+    <kd>200.0</kd>
+    <minDepth>0.001</minDepth>
+    <maxVel>1.0</maxVel>
+  </gazebo>
+
+  <gazebo reference="rl_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+    <kp>5e4</kp>
+    <kd>200.0</kd>
+    <minDepth>0.001</minDepth>
+    <maxVel>1.0</maxVel>
+  </gazebo>
+
+  <gazebo reference="rr_wheel_link">
+    <mu1>1.0</mu1>
+    <mu2>1.0</mu2>
+    <kp>5e4</kp>
+    <kd>200.0</kd>
+    <minDepth>0.001</minDepth>
+    <maxVel>1.0</maxVel>
+  </gazebo>
+
+  <!-- =================================================================
        Gazebo Sensor Configs
 
        Sensor plugins and noise models are defined here as <gazebo>

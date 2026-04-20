@@ -63,17 +63,27 @@ def generate_launch_description():
                 "subscribe_rgbd": False,
                 "approx_sync": True,
                 "wait_imu_to_init": False,
-                # --- VO tuning for mixed ground + horizon features ---
-                # Use GFTT features (0) — better corner detection on tiles
-                "Vis/FeatureType": "6",
-                "Vis/MaxFeatures": "1000",
-                # PnP estimation (1) works with coplanar features (ground)
-                # Default (0) = 3D-3D which fails when features are on a plane
+                # --- Hardened VO tuning to prevent tracking failures ---
+                # GFTT (0) = Good Features To Track — most stable for sim
+                "Vis/FeatureType": "0",
+                # More features = more robust matching
+                "Vis/MaxFeatures": "2000",
+                # PnP estimation for coplanar ground features
                 "Vis/EstimationType": "1",
-                "Vis/MinInliers": "8",
-                "OdomF2M/MaxSize": "3000",
-                "OdomF2M/MaxNewFeatures": "300",
-                "Odom/ResetCountdown": "2",
+                # Higher min inliers = reject bad matches that cause spikes
+                "Vis/MinInliers": "15",
+                # Larger local map for better frame-to-map matching
+                "OdomF2M/MaxSize": "4000",
+                "OdomF2M/MaxNewFeatures": "500",
+                # Don't reset too quickly — resets create sudden jumps
+                "Odom/ResetCountdown": "5",
+                # KEY: Clamp max velocity to reject impossible estimates
+                # A ground robot never exceeds 2 m/s — anything above is noise
+                "Odom/FilteringStrategy": "1",
+                # Increase keyframe threshold to reduce drift accumulation
+                "Odom/KeyFrameThr": "0.3",
+                # Guess from motion model when tracking fails briefly
+                "Odom/GuessMotion": "true",
             }
         ],
         remappings=[
