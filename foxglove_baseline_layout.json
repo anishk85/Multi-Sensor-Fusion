@@ -1,0 +1,208 @@
+{
+  "configById": {
+    "3D!main": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 30,
+        "phi": 60,
+        "thetaOffset": 45,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "base_link",
+      "scene": {},
+      "transforms": {
+        "showLabel": false,
+        "editable": true
+      },
+      "topics": {
+        "/tf": { "visible": true },
+        "/tf_static": { "visible": true },
+        "/odometry/local": { "visible": true },
+        "/odometry/global": { "visible": true },
+        "/ground_truth/odom": { "visible": true },
+        "/diff_drive_controller/odom": { "visible": true }
+      },
+      "publish": {
+        "type": "point",
+        "poseTopic": "/move_base_simple/goal",
+        "pointTopic": "/clicked_point",
+        "poseEstimateTopic": "/initialpose"
+      }
+    },
+    "Plot!posX": {
+      "title": "Position X — Ground Truth vs EKF",
+      "paths": [
+        { "value": "/ground_truth/odom.pose.pose.position.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Ground Truth X", "color": "#4ecdc4" },
+        { "value": "/odometry/local.pose.pose.position.x", "enabled": true, "timestampMethod": "receiveTime", "label": "EKF Local X", "color": "#45b7d1" },
+        { "value": "/odometry/global.pose.pose.position.x", "enabled": true, "timestampMethod": "receiveTime", "label": "EKF Global X", "color": "#f9ca24" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!posY": {
+      "title": "Position Y — Ground Truth vs EKF",
+      "paths": [
+        { "value": "/ground_truth/odom.pose.pose.position.y", "enabled": true, "timestampMethod": "receiveTime", "label": "Ground Truth Y", "color": "#4ecdc4" },
+        { "value": "/odometry/local.pose.pose.position.y", "enabled": true, "timestampMethod": "receiveTime", "label": "EKF Local Y", "color": "#45b7d1" },
+        { "value": "/odometry/global.pose.pose.position.y", "enabled": true, "timestampMethod": "receiveTime", "label": "EKF Global Y", "color": "#f9ca24" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!linVel": {
+      "title": "Linear Velocity — Wheel / Visual / LiDAR / Cmd",
+      "paths": [
+        { "value": "/diff_drive_controller/odom.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Wheel vx", "color": "#f0932b" },
+        { "value": "/odometry/visual.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Visual vx", "color": "#a29bfe" },
+        { "value": "/odometry/lidar.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "LiDAR vx", "color": "#74b9ff" },
+        { "value": "/cmd_vel.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Cmd vx", "color": "#fd79a8" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!angVel": {
+      "title": "Angular Velocity — Wheel / Visual / LiDAR / Cmd",
+      "paths": [
+        { "value": "/diff_drive_controller/odom.twist.twist.angular.z", "enabled": true, "timestampMethod": "receiveTime", "label": "Wheel wz", "color": "#f0932b" },
+        { "value": "/odometry/visual.twist.twist.angular.z", "enabled": true, "timestampMethod": "receiveTime", "label": "Visual wz", "color": "#a29bfe" },
+        { "value": "/odometry/lidar.twist.twist.angular.z", "enabled": true, "timestampMethod": "receiveTime", "label": "LiDAR wz", "color": "#74b9ff" },
+        { "value": "/cmd_vel.angular.z", "enabled": true, "timestampMethod": "receiveTime", "label": "Cmd wz", "color": "#fd79a8" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!imuAccel": {
+      "title": "IMU — Linear Acceleration",
+      "paths": [
+        { "value": "/imu/data.linear_acceleration.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Accel X", "color": "#ff6b6b" },
+        { "value": "/imu/data.linear_acceleration.y", "enabled": true, "timestampMethod": "receiveTime", "label": "Accel Y", "color": "#ffd43b" },
+        { "value": "/imu/data.linear_acceleration.z", "enabled": true, "timestampMethod": "receiveTime", "label": "Accel Z", "color": "#51cf66" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!imuGyro": {
+      "title": "IMU — Angular Velocity",
+      "paths": [
+        { "value": "/imu/data.angular_velocity.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Gyro X", "color": "#ff6b6b" },
+        { "value": "/imu/data.angular_velocity.y", "enabled": true, "timestampMethod": "receiveTime", "label": "Gyro Y", "color": "#ffd43b" },
+        { "value": "/imu/data.angular_velocity.z", "enabled": true, "timestampMethod": "receiveTime", "label": "Gyro Z", "color": "#51cf66" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!odomVx": {
+      "title": "Odometry Source Comparison — vx",
+      "paths": [
+        { "value": "/ground_truth/odom.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Ground Truth vx", "color": "#4ecdc4" },
+        { "value": "/odometry/local.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "EKF Local vx", "color": "#45b7d1" },
+        { "value": "/odometry/global.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "EKF Global vx", "color": "#f9ca24" },
+        { "value": "/diff_drive_controller/odom.twist.twist.linear.x", "enabled": true, "timestampMethod": "receiveTime", "label": "Wheel vx", "color": "#f0932b" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    },
+    "Plot!gps": {
+      "title": "GPS — Latitude & Longitude",
+      "paths": [
+        { "value": "/gps/fix.latitude", "enabled": true, "timestampMethod": "receiveTime", "label": "Latitude", "color": "#ff6b6b" },
+        { "value": "/gps/fix.longitude", "enabled": true, "timestampMethod": "receiveTime", "label": "Longitude", "color": "#ffd43b" }
+      ],
+      "showXAxisLabels": true,
+      "showYAxisLabels": true,
+      "showLegend": true,
+      "legendDisplay": "floating",
+      "showPlotValuesInLegend": true,
+      "isSynced": true,
+      "xAxisVal": "timestamp"
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "linkedGlobalVariables": [],
+  "playbackConfig": {
+    "speed": 1.0
+  },
+  "layout": {
+    "direction": "column",
+    "first": {
+      "direction": "row",
+      "first": "3D!main",
+      "second": {
+        "direction": "row",
+        "first": {
+          "direction": "column",
+          "first": "Plot!posX",
+          "second": "Plot!posY",
+          "splitPercentage": 50
+        },
+        "second": {
+          "direction": "column",
+          "first": "Plot!linVel",
+          "second": "Plot!angVel",
+          "splitPercentage": 50
+        },
+        "splitPercentage": 50
+      },
+      "splitPercentage": 33
+    },
+    "second": {
+      "direction": "row",
+      "first": {
+        "direction": "row",
+        "first": "Plot!imuAccel",
+        "second": "Plot!imuGyro",
+        "splitPercentage": 50
+      },
+      "second": {
+        "direction": "row",
+        "first": "Plot!odomVx",
+        "second": "Plot!gps",
+        "splitPercentage": 60
+      },
+      "splitPercentage": 50
+    },
+    "splitPercentage": 55
+  }
+}

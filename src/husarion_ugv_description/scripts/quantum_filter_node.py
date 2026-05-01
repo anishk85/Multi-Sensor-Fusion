@@ -82,7 +82,7 @@ class RQNNFilterNode(Node):
             # bias the wavepacket toward the observation
             filt._bias_wavepacket(val, strength=filt.bias_strength)
             V = filt._potential(y_obs=val)
-            for _ in range(2): # 2 substeps for stability
+            for _ in range(3): # 3 substeps — matches filter_signal() batch mode
                 filt._evolve_psi(V)
             
             y_hat = filt._estimate(filt._pdf())
@@ -110,10 +110,12 @@ class RQNNFilterNode(Node):
         # Gazebo publishes stddev²=0.000081 (white noise only), but actual noise
         # including bias_stddev=0.001 is ~0.002. Without this override the EKF
         # over-trusts the biased gyro signal, causing yaw drift.
+        # gz covariance higher (0.004) — RQNN achieves only 12.8% noise reduction
+        # on gz vs 100% for gx/gy, so EKF trusts gz estimate less.
         out.angular_velocity_covariance = [
-            0.002, 0.0,  0.0,
+            0.002, 0.0,   0.0,
             0.0,   0.002, 0.0,
-            0.0,   0.0,  0.002
+            0.0,   0.0,   0.004
         ]
 
         self.imu_pub.publish(out)
@@ -128,8 +130,15 @@ class RQNNFilterNode(Node):
         out.latitude = msg.latitude
         out.longitude = msg.longitude
         out.altitude = msg.altitude
-        out.position_covariance = msg.position_covariance
-        out.position_covariance_type = msg.position_covariance_type
+        # Gazebo NavSat bridge publishes covariance=0 (UNKNOWN) even with noise configured.
+        # navsat_transform passes this through → EKF Kalman gain K→1 → 0.5m GPS jumps.
+        # Inject diagonal covariance from URDF noise config: horizontal stddev=0.5m → var=0.25m².
+        out.position_covariance = [
+            0.25, 0.0, 0.0,
+            0.0,  0.25, 0.0,
+            0.0,  0.0,  1.0,
+        ]
+        out.position_covariance_type = NavSatFix.COVARIANCE_TYPE_DIAGONAL_KNOWN
         self.gps_pub.publish(out)
 
     def _process_odom(self, msg: Odometry, prefix: str):
@@ -159,8 +168,8 @@ class RQNNFilterNode(Node):
         return out
 
     def odom_cb(self, msg: Odometry):
-        out = self._process_odom(msg, 'wheel')
-        self.odom_pub.publish(out)
+        # RQNN adds <1% benefit on wheel odometry — bypass to avoid latency.
+        self.odom_pub.publish(msg)
         self.processed['odom'] += 1
 
     def vo_cb(self, msg: Odometry):
@@ -169,8 +178,8 @@ class RQNNFilterNode(Node):
         self.processed['visual'] += 1
 
     def lo_cb(self, msg: Odometry):
-        out = self._process_odom(msg, 'lidar')
-        self.lo_pub.publish(out)
+        # RQNN degrades LiDAR odometry (−2.5% to −7.9% noise increase) — bypass.
+        self.lo_pub.publish(msg)
         self.processed['lidar'] += 1
 
     def log_stats(self):

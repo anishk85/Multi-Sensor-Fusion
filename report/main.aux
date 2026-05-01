@@ -1,0 +1,92 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{forster2017}
+\citation{robotlocalization}
+\citation{gandhi2014}
+\citation{gazebo}
+\citation{mourikis2007,hesch2013}
+\citation{zhang2014,shan2020}
+\citation{kalmanfilter,chen2019}
+\citation{huang2013,dhoedt2014}
+\citation{forster2017,song2015}
+\citation{gandhi2014}
+\citation{husarion}
+\citation{ros2}
+\citation{gazebo}
+\citation{robotlocalization}
+\citation{ros2control}
+\citation{realsense}
+\citation{rtabmap}
+\citation{robotlocalization}
+\@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {II}System Architecture}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Hardware and Sensor Suite}{1}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Dual-EKF Architecture}{1}{subsection.2.2}\protected@file@percent }
+\citation{gandhi2014}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Covariance Relay Nodes}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}RQNN Pre-Filter Integration}{2}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Algorithms}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Extended Kalman Filter}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Recurrent Quantum Neural Network (RQNN)}{2}{subsection.3.2}\protected@file@percent }
+\citation{cranknicolson}
+\citation{pso}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}PSO Hyperparameter Optimization}{3}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Experimental Setup and Results}{3}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Data Collection}{3}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Noise Characterization}{3}{subsection.4.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Measured Sensor Noise (Stationary, 60\,s)}}{3}{table.1}\protected@file@percent }
+\newlabel{tab:noise}{{I}{3}{Measured Sensor Noise (Stationary, 60\,s)}{table.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces RQNN Noise Reduction by Sensor Channel}}{3}{table.2}\protected@file@percent }
+\newlabel{tab:rqnn}{{II}{3}{RQNN Noise Reduction by Sensor Channel}{table.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}RQNN Pre-Filtering Performance}{3}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Trajectory and Velocity Comparison}{3}{subsection.4.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces RQNN pre-filtering on IMU channels. Top: gyroscope; bottom: accelerometer. Gyro X/Y benefit from high-mass wavefunction dynamics; gyro Z is limited by its $13.5\times $ higher noise floor.}}{4}{figure.1}\protected@file@percent }
+\newlabel{fig:imu_filter}{{1}{4}{RQNN pre-filtering on IMU channels. Top: gyroscope; bottom: accelerometer. Gyro X/Y benefit from high-mass wavefunction dynamics; gyro Z is limited by its $13.5\times $ higher noise floor}{figure.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces XY trajectory: Baseline EKF vs.\ QF-EKF vs.\ ground truth. QF-EKF produces smoother turn transitions due to RQNN-attenuated IMU noise.}}{4}{figure.2}\protected@file@percent }
+\newlabel{fig:trajectory}{{2}{4}{XY trajectory: Baseline EKF vs.\ QF-EKF vs.\ ground truth. QF-EKF produces smoother turn transitions due to RQNN-attenuated IMU noise}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Innovation Analysis}{4}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Filtering Limitations and Observed Challenges}{4}{subsection.4.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Fused velocity comparison: Baseline vs.\ QF-EKF. RQNN pre-filtering reduces velocity jitter through IMU noise attenuation.}}{4}{figure.3}\protected@file@percent }
+\newlabel{fig:velocity}{{3}{4}{Fused velocity comparison: Baseline vs.\ QF-EKF. RQNN pre-filtering reduces velocity jitter through IMU noise attenuation}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces GPS innovation distributions. QF-EKF shows a tighter spread, consistent with improved prediction--measurement agreement.}}{4}{figure.4}\protected@file@percent }
+\newlabel{fig:innovation}{{4}{4}{GPS innovation distributions. QF-EKF shows a tighter spread, consistent with improved prediction--measurement agreement}{figure.4}{}}
+\citation{gandhi2014}
+\bibcite{mourikis2007}{1}
+\bibcite{hesch2013}{2}
+\bibcite{huang2013}{3}
+\bibcite{forster2017}{4}
+\bibcite{song2015}{5}
+\bibcite{dhoedt2014}{6}
+\bibcite{zhang2014}{7}
+\bibcite{chen2019}{8}
+\bibcite{shan2020}{9}
+\bibcite{kalmanfilter}{10}
+\bibcite{robotlocalization}{11}
+\bibcite{gandhi2014}{12}
+\bibcite{pso}{13}
+\bibcite{rtabmap}{14}
+\bibcite{cranknicolson}{15}
+\bibcite{ros2}{16}
+\bibcite{gazebo}{17}
+\bibcite{ros2control}{18}
+\bibcite{realsense}{19}
+\bibcite{husarion}{20}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{5}{section*.1}\protected@file@percent }
+\gdef \@abspage@last{5}

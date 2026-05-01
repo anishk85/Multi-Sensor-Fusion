@@ -54,6 +54,7 @@ def generate_launch_description():
         name="visual_odometry",
         output="screen",
         condition=IfCondition(LaunchConfiguration("use_visual_odom")),
+        ros_arguments=["--log-level", "visual_odometry:=warn"],
         parameters=[
             {
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
@@ -63,27 +64,30 @@ def generate_launch_description():
                 "subscribe_rgbd": False,
                 "approx_sync": True,
                 "wait_imu_to_init": False,
-                # --- Hardened VO tuning to prevent tracking failures ---
+                # --- Hardened VO tuning for sparse agricultural terrain ---
                 # GFTT (0) = Good Features To Track — most stable for sim
                 "Vis/FeatureType": "0",
-                # More features = more robust matching
+                # More features = more robust matching on sparse terrain
                 "Vis/MaxFeatures": "2000",
-                # PnP estimation for coplanar ground features
+                # PnP estimation for RGBD (needs valid depth)
                 "Vis/EstimationType": "1",
-                # Higher min inliers = reject bad matches that cause spikes
-                "Vis/MinInliers": "15",
+                # Lowered 15→6: agricultural terrain has 7-14 visible features max;
+                # 15 caused perpetual reset loop (0 inliers, reset, repeat).
+                # 6 = minimum for PnP solve with margin.
+                "Vis/MinInliers": "6",
                 # Larger local map for better frame-to-map matching
                 "OdomF2M/MaxSize": "4000",
                 "OdomF2M/MaxNewFeatures": "500",
                 # Don't reset too quickly — resets create sudden jumps
                 "Odom/ResetCountdown": "5",
                 # KEY: Clamp max velocity to reject impossible estimates
-                # A ground robot never exceeds 2 m/s — anything above is noise
                 "Odom/FilteringStrategy": "1",
                 # Increase keyframe threshold to reduce drift accumulation
                 "Odom/KeyFrameThr": "0.3",
-                # Guess from motion model when tracking fails briefly
-                "Odom/GuessMotion": "true",
+                # Disabled: motion model after reset gives wrong initial guess →
+                # RANSAC searches wrong region → 0 inliers → reset loop.
+                # Without guess, RANSAC searches globally → finds inliers.
+                "Odom/GuessMotion": "false",
             }
         ],
         remappings=[
@@ -102,6 +106,7 @@ def generate_launch_description():
         name="lidar_odometry",
         output="screen",
         condition=IfCondition(LaunchConfiguration("use_lidar_odom")),
+        ros_arguments=["--log-level", "lidar_odometry:=warn"],
         parameters=[
             {
                 "use_sim_time": LaunchConfiguration("use_sim_time"),
@@ -111,13 +116,13 @@ def generate_launch_description():
                 "deskewing": False,
                 # RTAB-Map internal parameters are strings:
                 "Icp/PointToPlane": "true",
-                "Icp/Iterations": "10",
-                "Icp/VoxelSize": "0.15",
+                "Icp/Iterations": "7",
+                "Icp/VoxelSize": "0.25",
                 "Icp/Epsilon": "0.001",
                 "Icp/MaxTranslation": "1.0",
-                "Icp/MaxCorrespondenceDistance": "1.0",
+                "Icp/MaxCorrespondenceDistance": "0.8",
                 "Icp/OutlierRatio": "0.7",
-                "Odom/ScanKeyFrameThr": "0.7",
+                "Odom/ScanKeyFrameThr": "0.5",
             },
         ],
         remappings=[

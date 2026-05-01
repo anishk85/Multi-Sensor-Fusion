@@ -28,39 +28,28 @@ def _snr_improvement(clean: np.ndarray, noisy: np.ndarray,
 
 
 def _rmse_zero_lag(est: np.ndarray, ref: np.ndarray) -> float:
-    # Standard RMSE
     rmse = np.sqrt(np.mean((est - ref) ** 2))
-    
-    # Calculate phase delay using cross-correlation
-    # We want max correlation at lag = 0
     cc = np.correlate(est - np.mean(est), ref - np.mean(ref), mode='full')
     lag = abs(np.argmax(cc) - (len(est) - 1))
-    
-    # Add a massive penalty if there is ANY phase delay (lag > 0)
-    # lag of 1 sample = huge penalty, forcing the PSO to find zero-lag parameters
-    penalty = lag * 10.0 
-    
-    return rmse + penalty
+    # Reduced from 10.0 — original penalty dominated RMSE, forcing zero-lag
+    # at the cost of filter quality. 0.3 penalises lag without suppressing noise reduction.
+    return rmse + lag * 0.3
 
 
 def _fitness_optimal_smooth(est: np.ndarray, ref: np.ndarray) -> float:
     # 1. Base tracking (RMSE against reference/noisy signal)
     rmse = np.sqrt(np.mean((est - ref) ** 2))
-    
-    # 2. Smoothness Penalty (First derivative roughness)
-    # This prevents tracking high-frequency noise spikes
+
+    # 2. Smoothness: penalise high-frequency jitter in the estimate
     roughness = np.sqrt(np.mean(np.diff(est) ** 2))
-    
-    # 3. Phase Delay Penalty (Lag against reference)
-    # We want max correlation at lag = 0
+
+    # 3. Phase delay: soft penalty so lag matters but doesn't swamp RMSE
     cc = np.correlate(est - np.mean(est), ref - np.mean(ref), mode='full')
     lag = abs(np.argmax(cc) - (len(est) - 1))
-    
-    # Balance components: 
-    # - RMSE ensures it tracks the general shape (~0.1 - 0.5)
-    # - Roughness penalty ensures it rejects noise (* 2.0 weight)
-    # - Lag penalty ensures it doesn't fall behind (* 1.0 weight)
-    return rmse + (roughness * 2.0) + (lag * 1.0)
+
+    # Weights: RMSE (shape) + roughness (noise rejection) + lag (responsiveness)
+    # Reduced lag weight 1.0→0.3: lag of 1 sample no longer dominates over RMSE.
+    return rmse + (roughness * 1.5) + (lag * 0.3)
 
 class PSOOptimizer:
     """
@@ -88,24 +77,25 @@ class PSOOptimizer:
     """
 
     DEFAULT_BOUNDS = {
-        "mass":           (0.5, 5.0),
-        "sigma":          (0.1, 2.0),
-        "beta":           (0.05, 1.0),
-        "beta_d":         (0.001, 0.05),
-        "hbar":           (0.5, 3.0),
-        "gamma":          (0.5, 10.0),
-        "bias_strength":  (0.1, 0.8),
+        "mass":           (0.5, 15.0),   # expanded — prior runs hit 5.0 ceiling
+        "sigma":          (0.05, 3.0),   # expanded — prior runs hit both 0.1 floor and 2.0 ceiling
+        "beta":           (0.05, 2.0),   # expanded — prior runs hit 1.0 ceiling
+        "beta_d":         (0.001, 0.1),  # expanded — prior runs hit 0.05 ceiling
+        "hbar":           (0.5, 6.0),    # expanded — prior runs hit 3.0 ceiling
+        "gamma":          (0.1, 20.0),   # expanded — prior runs hit 10.0 ceiling
+        "bias_strength":  (0.05, 0.95),  # expanded — prior runs hit 0.8 ceiling
     }
 
     def __init__(
         self,
         param_bounds: Optional[Dict[str, Tuple[float, float]]] = None,
-        n_particles: int = 20,
-        n_iterations: int = 30,
-        w: float = 0.7,
+        n_particles: int = 50,
+        n_iterations: int = 100,
+        w: float = 0.9,
+        w_min: float = 0.4,
         c1: float = 1.5,
         c2: float = 1.5,
-        fitness_fn: str = "rmse_zero_lag",
+        fitness_fn: str = "optimal_smooth",
         seed: Optional[int] = None,
     ):
         self.bounds = param_bounds or self.DEFAULT_BOUNDS
@@ -114,6 +104,7 @@ class PSOOptimizer:
         self.n_particles = n_particles
         self.n_iterations = n_iterations
         self.w = w
+        self.w_min = w_min
         self.c1 = c1
         self.c2 = c2
         self.fitness_fn = fitness_fn
@@ -205,7 +196,12 @@ class PSOOptimizer:
             print(f"PSO: {self.n_particles} particles × {self.n_iterations} iters")
             print(f"  Optimising: {self.param_names}")
 
+        w_max = self.w
+
         for it in range(self.n_iterations):
+            # Linear inertia decay: explore early (w_max), exploit late (w_min)
+            w = w_max - (w_max - self.w_min) * it / max(self.n_iterations - 1, 1)
+
             for p in range(self.n_particles):
                 fit = self._evaluate(
                     positions[p], noisy_signal, reference_signal, base_rqnn_kwargs
@@ -222,16 +218,15 @@ class PSOOptimizer:
             self.history.append(g_best_fit)
 
             if verbose:
-                metric = "RMSE" if self.fitness_fn == "rmse" else "neg-SNR"
                 print(f"  Iter {it+1:3d}/{self.n_iterations} | "
-                      f"best {metric} = {g_best_fit:.6f}")
+                      f"w={w:.3f} | best={g_best_fit:.6f}")
 
             # --- Update velocities and positions ---
             r1 = self.rng.uniform(0, 1, (self.n_particles, self.n_dim))
             r2 = self.rng.uniform(0, 1, (self.n_particles, self.n_dim))
 
             velocities = (
-                self.w * velocities
+                w * velocities
                 + self.c1 * r1 * (p_best_pos - positions)
                 + self.c2 * r2 * (g_best_pos - positions)
             )

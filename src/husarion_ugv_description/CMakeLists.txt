@@ -9,6 +9,8 @@ install(DIRECTORY config launch meshes models rviz urdf worlds
 install(PROGRAMS
         scripts/diff_drive_xbox_teleop.py
         scripts/quantum_filter_node.py
+        scripts/gps_covariance_relay.py
+        scripts/imu_covariance_relay.py
         DESTINATION lib/${PROJECT_NAME}
 )
 
