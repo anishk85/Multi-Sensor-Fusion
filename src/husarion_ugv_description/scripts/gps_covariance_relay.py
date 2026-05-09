@@ -7,15 +7,15 @@ even when noise is configured in the URDF. robot_localization navsat_transform p
 through to /odometry/gps, causing the EKF to treat GPS as a perfect measurement (K→1)
 and slam to every noisy reading.
 
-This node republishes /gps/fix with realistic covariance values derived from the URDF
-noise config: horizontal stddev = 4.5e-6 deg ≈ 0.5 m → variance = 0.25 m².
+This node republishes /gps/fix with realistic covariance values matching URDF noise.
+URDF configured for RTK-fixed accuracy: horizontal stddev=9e-8 deg ≈ 0.01 m → var = 1e-4 m².
 """
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import NavSatFix, NavSatStatus
 
-GPS_VAR_HORIZONTAL = 9.0    # 3.0 m stddev → 9.0 m² variance (matches observed Gazebo GPS scatter σ≈0.5m range≈2.4m)
-GPS_VAR_VERTICAL   = 99.0   # 10.0 m stddev — not used in 2D mode
+GPS_VAR_HORIZONTAL = 1.0e-4   # 0.01 m stddev → 1e-4 m² variance (RTK-fixed; matches URDF 9e-8 deg)
+GPS_VAR_VERTICAL   = 9.0e-4   # 0.03 m stddev (RTK vertical) — not used in 2D mode
 
 
 class GPSCovarianceRelay(Node):

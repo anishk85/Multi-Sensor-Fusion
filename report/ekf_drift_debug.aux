@@ -1,0 +1,76 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Problem Statement}{1}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Diagnostic Infrastructure}{1}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Fix Attempts --- Chronological}{2}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Fix 1: URDF GPS noise too high (consumer-grade)}{2}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Fix 2: IMU accelerometer bias mean = 0.1}{2}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Fix 3: navsat frequency 1\nobreakspace  {}Hz $\to $ 10\nobreakspace  {}Hz}{2}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Fix 4: Tighten EKF\nobreakspace  {}\#2 process noise on $v_y$}{2}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Fix 5: Disable IMU linear acceleration in EKF\nobreakspace  {}\#2}{2}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Fix 6: Switch VO/LO from position-fusion to velocity-fusion}{2}{subsection.3.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Fix 7: Tighten yaw and $v_{\mathrm  {yaw}}$ process noise}{2}{subsection.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Fix 8: Set \texttt  {imu0\_differential=false} in EKF\nobreakspace  {}\#2}{3}{subsection.3.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.9}Fix 9: Drop VO/LO entirely from EKF\nobreakspace  {}\#2}{3}{subsection.3.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.10}Fix 10: Increase $Q[x,y]$ to 0.5}{3}{subsection.3.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.11}Fix 11: Compromise --- $Q[x,y] = 0.05$}{3}{subsection.3.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.12}Fix 12: GPS rejection threshold 3.0 $\to $ 100}{3}{subsection.3.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.13}Fix 13: Enable wheel $v_y$ measurement (\texttt  {odom0\_config[7]=true})}{3}{subsection.3.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.14}Fix 14: LiDAR yaw absolute in differential mode}{3}{subsection.3.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.15}Fix 15: Circular Reference Loop --- the actual root cause}{3}{subsection.3.15}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}The Circular Reference Bug}{4}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Topology Before Fix}{4}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Why It Self-Consistently Fails}{4}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Confirmation via TF Inspection}{4}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}The Fix --- Linear Topology}{5}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Concern: Feedback Loop?}{5}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Final Working Configuration}{5}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}EKF\nobreakspace  {}\#2 Sensor Matrix}{5}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Process Noise Diagonal}{5}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Sensor Noise Sources}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Verification --- Stationary Hold}{6}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Case Study --- How the Circular Reference Was Found}{6}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Step 1 --- Quick health check after Fix 14}{6}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Step 2 --- Is EKF\nobreakspace  {}\#2 yaw walking?}{6}{subsection.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}Step 3 --- Is internal velocity walking?}{7}{subsection.7.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Step 4 --- The contradiction}{7}{subsection.7.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.5}Step 5 --- Confirm GPS arriving and being processed}{7}{subsection.7.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.6}Step 6 --- Are gates accepting GPS?}{7}{subsection.7.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.7}Step 7 --- Then why does state not snap to GPS?}{7}{subsection.7.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.8}Step 8 --- Inspect TF tree (the breakthrough)}{8}{subsection.7.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.9}Step 9 --- The math of the loop}{8}{subsection.7.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.10}Step 10 --- Verify with numbers}{8}{subsection.7.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.11}Step 11 --- The fix and the proof}{9}{subsection.7.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.12}Why It Took 14 Other Fixes To Find}{9}{subsection.7.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Lessons Learned}{9}{section.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Diagnostic Commands --- What We Ran, What It Gave Us}{10}{section.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1}Topic-level state inspection}{10}{subsection.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2}Internal EKF state (twist field reveals hidden velocity)}{10}{subsection.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3}Per-sensor message + covariance audit}{10}{subsection.9.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4}Live parameter verification (config really loaded?)}{10}{subsection.9.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.5}Subscription audit (is the node actually fusing what we think?)}{11}{subsection.9.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.6}TF tree inspection --- the breakthrough}{11}{subsection.9.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.7}Topic publish-rate verification}{11}{subsection.9.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.8}Bag-based offline analysis}{11}{subsection.9.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.9}Source code archaeology}{12}{subsection.9.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.10}URDF / world / plugin survey}{12}{subsection.9.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.11}Build / launch}{12}{subsection.9.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.12}Summary --- the three commands that mattered most}{12}{subsection.9.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Files Changed}{13}{section.10}\protected@file@percent }
+\gdef \@abspage@last{13}

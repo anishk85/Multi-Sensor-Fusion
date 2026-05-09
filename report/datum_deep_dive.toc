@@ -1,0 +1,34 @@
+\contentsline {section}{\numberline {1}The Big Picture: What Problem Are We Solving?}{3}{section.1}%
+\contentsline {section}{\numberline {2}Step 1: The Gazebo World Defines ``Where on Earth''}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Spherical Coordinates in \texttt {agriculture.world}}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}How the NavSat Sensor Generates GPS Readings}{4}{subsection.2.2}%
+\contentsline {section}{\numberline {3}Step 2: From Lat/Lon to Local XY Meters}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}The UTM Projection}{4}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}The First-Fix Datum: Where Is (0, 0)?}{5}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Step 3: Heading Alignment---Which Way Is ``Forward''?}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Why Not Use IMU Yaw Directly?}{6}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}How \texttt {use\_odometry\_yaw: true} Solves This}{6}{subsection.4.2}%
+\contentsline {section}{\numberline {5}Step 4: The Three Coordinate Frames}{7}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Frame Definitions}{7}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Who Publishes What}{8}{subsection.5.2}%
+\contentsline {section}{\numberline {6}Step 5: 2D Mode---Projecting to the Ground Plane}{9}{section.6}%
+\contentsline {subsection}{\numberline {6.1}The Full 15-Element State}{9}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}What \texttt {two\_d\_mode: true} Actually Does}{9}{subsection.6.2}%
+\contentsline {section}{\numberline {7}Step 6: Why GPS Is Excluded from EKF\,\#2}{10}{section.7}%
+\contentsline {subsection}{\numberline {7.1}The Covariance Cross-Term Problem}{11}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}The Solution: Sensor Consensus}{11}{subsection.7.2}%
+\contentsline {section}{\numberline {8}Step 7: The Complete Data Flow}{12}{section.8}%
+\contentsline {section}{\numberline {9}Step 8: The TF Frame Hierarchy}{13}{section.9}%
+\contentsline {subsection}{\numberline {9.1}Initial Covariance: The $10^{-9}$ Lock}{13}{subsection.9.1}%
+\contentsline {section}{\numberline {10}RTAB-Map Visual Odometry (RGB-D)}{14}{section.10}%
+\contentsline {subsection}{\numberline {10.1}Inputs}{14}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}How It Works (Step by Step)}{14}{subsection.10.2}%
+\contentsline {subsection}{\numberline {10.3}Output}{15}{subsection.10.3}%
+\contentsline {section}{\numberline {11}RTAB-Map ICP LiDAR Odometry}{15}{section.11}%
+\contentsline {subsection}{\numberline {11.1}Inputs}{16}{subsection.11.1}%
+\contentsline {subsection}{\numberline {11.2}How It Works (Step by Step)}{16}{subsection.11.2}%
+\contentsline {subsection}{\numberline {11.3}Output}{17}{subsection.11.3}%
+\contentsline {subsection}{\numberline {11.4}Visual Odom vs.\ LiDAR Odom: Key Differences}{17}{subsection.11.4}%
+\contentsline {section}{\numberline {12}How the EKF Consumes Odometry: Differential Mode}{17}{section.12}%
+\contentsline {section}{\numberline {13}The Sensor Selection Matrix}{18}{section.13}%
+\contentsline {section}{\numberline {14}Summary: Your Config Decisions at a Glance}{20}{section.14}%

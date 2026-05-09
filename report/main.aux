@@ -38,35 +38,47 @@
 \@writefile{toc}{\contentsline {section}{\numberline {II}System Architecture}{1}{section.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Hardware and Sensor Suite}{1}{subsection.2.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Dual-EKF Architecture}{1}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Datum Projection and Map Frame Determination}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-C}1}Spherical Coordinates and the Gazebo NavSat System}{2}{subsubsection.2.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces GPS datum projection pipeline: from the WGS-84 spherical coordinates defined in the Gazebo world file, through the NavSat sensor with noise injection and covariance relay, to the \texttt  {navsat\_transform} node that produces local Cartesian odometry. GPS output is deliberately \emph  {not} fused into EKF\,\#2.}}{2}{figure.1}\protected@file@percent }
+\newlabel{fig:datum_pipeline}{{1}{2}{GPS datum projection pipeline: from the WGS-84 spherical coordinates defined in the Gazebo world file, through the NavSat sensor with noise injection and covariance relay, to the \texttt {navsat\_transform} node that produces local Cartesian odometry. GPS output is deliberately \emph {not} fused into EKF\,\#2}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-C}2}NavSat Transform: Datum Initialization Without a Fixed Origin}{2}{subsubsection.2.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-C}3}2D Mode and State Reduction}{3}{subsubsection.2.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {II-C}4}Map Frame Anchoring Strategy}{3}{subsubsection.2.3.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces State reduction under \texttt  {two\_d\_mode: true}. The full 15-element EKF state is projected to a 6-DOF planar subset. Grey/crossed elements are zeroed at each prediction step. The robot's state is constrained to the ground plane ($z = 0$, roll $= 0$, pitch $= 0$).}}{3}{figure.2}\protected@file@percent }
+\newlabel{fig:2d_mode}{{2}{3}{State reduction under \texttt {two\_d\_mode: true}. The full 15-element EKF state is projected to a 6-DOF planar subset. Grey/crossed elements are zeroed at each prediction step. The robot's state is constrained to the ground plane ($z = 0$, roll $= 0$, pitch $= 0$)}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Covariance Relay Nodes}{3}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-E}}RQNN Pre-Filter Integration}{3}{subsection.2.5}\protected@file@percent }
 \citation{gandhi2014}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Covariance Relay Nodes}{2}{subsection.2.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}RQNN Pre-Filter Integration}{2}{subsection.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {III}Algorithms}{2}{section.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Extended Kalman Filter}{2}{subsection.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Recurrent Quantum Neural Network (RQNN)}{2}{subsection.3.2}\protected@file@percent }
 \citation{cranknicolson}
 \citation{pso}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}PSO Hyperparameter Optimization}{3}{subsection.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {IV}Experimental Setup and Results}{3}{section.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Data Collection}{3}{subsection.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Noise Characterization}{3}{subsection.4.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Measured Sensor Noise (Stationary, 60\,s)}}{3}{table.1}\protected@file@percent }
-\newlabel{tab:noise}{{I}{3}{Measured Sensor Noise (Stationary, 60\,s)}{table.1}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces RQNN Noise Reduction by Sensor Channel}}{3}{table.2}\protected@file@percent }
-\newlabel{tab:rqnn}{{II}{3}{RQNN Noise Reduction by Sensor Channel}{table.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}RQNN Pre-Filtering Performance}{3}{subsection.4.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Trajectory and Velocity Comparison}{3}{subsection.4.4}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces RQNN pre-filtering on IMU channels. Top: gyroscope; bottom: accelerometer. Gyro X/Y benefit from high-mass wavefunction dynamics; gyro Z is limited by its $13.5\times $ higher noise floor.}}{4}{figure.1}\protected@file@percent }
-\newlabel{fig:imu_filter}{{1}{4}{RQNN pre-filtering on IMU channels. Top: gyroscope; bottom: accelerometer. Gyro X/Y benefit from high-mass wavefunction dynamics; gyro Z is limited by its $13.5\times $ higher noise floor}{figure.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces XY trajectory: Baseline EKF vs.\ QF-EKF vs.\ ground truth. QF-EKF produces smoother turn transitions due to RQNN-attenuated IMU noise.}}{4}{figure.2}\protected@file@percent }
-\newlabel{fig:trajectory}{{2}{4}{XY trajectory: Baseline EKF vs.\ QF-EKF vs.\ ground truth. QF-EKF produces smoother turn transitions due to RQNN-attenuated IMU noise}{figure.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Innovation Analysis}{4}{subsection.4.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Filtering Limitations and Observed Challenges}{4}{subsection.4.6}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Fused velocity comparison: Baseline vs.\ QF-EKF. RQNN pre-filtering reduces velocity jitter through IMU noise attenuation.}}{4}{figure.3}\protected@file@percent }
-\newlabel{fig:velocity}{{3}{4}{Fused velocity comparison: Baseline vs.\ QF-EKF. RQNN pre-filtering reduces velocity jitter through IMU noise attenuation}{figure.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces GPS innovation distributions. QF-EKF shows a tighter spread, consistent with improved prediction--measurement agreement.}}{4}{figure.4}\protected@file@percent }
-\newlabel{fig:innovation}{{4}{4}{GPS innovation distributions. QF-EKF shows a tighter spread, consistent with improved prediction--measurement agreement}{figure.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces ROS\,2 TF frame hierarchy. EKF\,\#1 publishes \texttt  {odom}$\rightarrow $\texttt  {base\_link}; EKF\,\#2 publishes \texttt  {map}$\rightarrow $\texttt  {odom}. The \texttt  {navsat\_transform} node converts GPS to Cartesian but its output is not injected into EKF\,\#2. \texttt  {use\_odometry\_yaw = true} breaks the potential circular dependency by sourcing heading from EKF\,\#1 (which has no GPS input).}}{4}{figure.3}\protected@file@percent }
+\newlabel{fig:tf_hierarchy}{{3}{4}{ROS\,2 TF frame hierarchy. EKF\,\#1 publishes \texttt {odom}$\rightarrow $\texttt {base\_link}; EKF\,\#2 publishes \texttt {map}$\rightarrow $\texttt {odom}. The \texttt {navsat\_transform} node converts GPS to Cartesian but its output is not injected into EKF\,\#2. \texttt {use\_odometry\_yaw = true} breaks the potential circular dependency by sourcing heading from EKF\,\#1 (which has no GPS input)}{figure.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {III}Algorithms}{4}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Extended Kalman Filter}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Recurrent Quantum Neural Network (RQNN)}{4}{subsection.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Measured Sensor Noise (Stationary, 60\,s)}}{5}{table.1}\protected@file@percent }
+\newlabel{tab:noise}{{I}{5}{Measured Sensor Noise (Stationary, 60\,s)}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}PSO Hyperparameter Optimization}{5}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Experimental Setup and Results}{5}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Data Collection}{5}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Noise Characterization}{5}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}RQNN Pre-Filtering Performance}{5}{subsection.4.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces RQNN Noise Reduction by Sensor Channel}}{5}{table.2}\protected@file@percent }
+\newlabel{tab:rqnn}{{II}{5}{RQNN Noise Reduction by Sensor Channel}{table.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces RQNN pre-filtering on IMU channels. Top: gyroscope; bottom: accelerometer. Gyro X/Y benefit from high-mass wavefunction dynamics; gyro Z is limited by its $13.5\times $ higher noise floor.}}{5}{figure.4}\protected@file@percent }
+\newlabel{fig:imu_filter}{{4}{5}{RQNN pre-filtering on IMU channels. Top: gyroscope; bottom: accelerometer. Gyro X/Y benefit from high-mass wavefunction dynamics; gyro Z is limited by its $13.5\times $ higher noise floor}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Trajectory and Velocity Comparison}{5}{subsection.4.4}\protected@file@percent }
 \citation{gandhi2014}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces XY trajectory: Baseline EKF vs.\ QF-EKF vs.\ ground truth. QF-EKF produces smoother turn transitions due to RQNN-attenuated IMU noise.}}{6}{figure.5}\protected@file@percent }
+\newlabel{fig:trajectory}{{5}{6}{XY trajectory: Baseline EKF vs.\ QF-EKF vs.\ ground truth. QF-EKF produces smoother turn transitions due to RQNN-attenuated IMU noise}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Fused velocity comparison: Baseline vs.\ QF-EKF. RQNN pre-filtering reduces velocity jitter through IMU noise attenuation.}}{6}{figure.6}\protected@file@percent }
+\newlabel{fig:velocity}{{6}{6}{Fused velocity comparison: Baseline vs.\ QF-EKF. RQNN pre-filtering reduces velocity jitter through IMU noise attenuation}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Innovation Analysis}{6}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Filtering Limitations and Observed Challenges}{6}{subsection.4.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces GPS innovation distributions. QF-EKF shows a tighter spread, consistent with improved prediction--measurement agreement.}}{6}{figure.7}\protected@file@percent }
+\newlabel{fig:innovation}{{7}{6}{GPS innovation distributions. QF-EKF shows a tighter spread, consistent with improved prediction--measurement agreement}{figure.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{6}{section.5}\protected@file@percent }
 \bibcite{mourikis2007}{1}
 \bibcite{hesch2013}{2}
 \bibcite{huang2013}{3}
@@ -87,6 +99,5 @@
 \bibcite{ros2control}{18}
 \bibcite{realsense}{19}
 \bibcite{husarion}{20}
-\@writefile{toc}{\contentsline {section}{\numberline {V}Conclusion}{5}{section.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{5}{section*.1}\protected@file@percent }
-\gdef \@abspage@last{5}
+\@writefile{toc}{\contentsline {section}{References}{7}{section*.1}\protected@file@percent }
+\gdef \@abspage@last{7}

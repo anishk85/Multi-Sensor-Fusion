@@ -1,22 +1,14 @@
 #!/usr/bin/env python3
 # =============================================================================
-#  Hybrid QF + Dual EKF + NavSat Fusion Launch File
+#  Hybrid launch
 #
-#  Startup sequence (event-driven, topic-gated):
-#    Stage 0  t=0       gz_lynx + gate_sensors (starts polling immediately)
-#    Stage 1  gate_A→   odom_sources + quantum_filter + gate_qf
-#    Stage 2  gate_B→   ekf_local + ekf_map + gate_ekf
-#    Stage 3  gate_C→   navsat_transform
+#  how it start up:
+#    stage 0: gazebo and wait
+#    stage 1: start odom and quantum filter
+#    stage 2: start ekf
+#    stage 3: start navsat
 #
-#  Each gate polls `ros2 topic list` every second.
-#  On timeout  → exit 1 → EmitEvent(Shutdown)  [KILL launch]
-#  On success  → exit 0 → next stage starts
-#
-#  Pipeline:
-#    Raw sensors → [quantum_filter_node] → /filtered topics → [EKF] → fused pose
-#
-#  Usage:
-#    ros2 launch husarion_ugv_description hybrid_qf_ekf.launch.py
+#  sensor -> filter -> ekf -> good pose
 # =============================================================================
 
 import os
@@ -135,8 +127,8 @@ def generate_launch_description():
         }.items(),
     )
 
-    # /scan does NOT exist — bridge publishes PointCloud2 on /lidar/points.
-    # /diff_drive_controller/odom appears after controller spawner finishes.
+    # /scan no exist, use PointCloud2.
+    # wheel odom come later.
     gate_sensors = make_topic_gate(
         "gate_sensors",
         ["/imu/data", "/lidar/points", "/diff_drive_controller/odom"],
@@ -157,9 +149,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    # Quantum Filter: QPSO wavelet denoising of all sensor streams.
-    # Subscribes to raw topics, publishes /filtered versions consumed by EKFs.
-    # Also corrects IMU + GPS covariances (replaces baseline covariance relays).
+    # Quantum filter make signal clean. it fix covariance too so no relay needed.
     quantum_filter = Node(
         package="husarion_ugv_description",
         executable="quantum_filter_node.py",
@@ -168,7 +158,7 @@ def generate_launch_description():
         parameters=[{"use_sim_time": True}],
     )
 
-    # extra_wait_s=3: RTAB-Map needs a few frames after first publish to warm up
+    # wait 3s for rtabmap to warm up.
     gate_qf = make_topic_gate(
         "gate_qf",
         ["/imu/data/filtered", "/gps/fix/filtered", "/odometry/lidar"],
@@ -207,8 +197,7 @@ def generate_launch_description():
     # =========================================================================
     # Stage 3: NavSat Transform
     # =========================================================================
-    # Remapped to odometry/local (EKF #1, no GPS) — NOT odometry/global.
-    # odometry/global creates EKF#2 → navsat → GPS → EKF#2 circular feedback.
+    # map to local! global make bad loop.
     navsat = Node(
         package="robot_localization",
         executable="navsat_transform_node",

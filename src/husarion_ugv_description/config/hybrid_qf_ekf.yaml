@@ -1,19 +1,19 @@
 # =============================================================================
-#  HYBRID QF + Dual EKF + NavSat Transform Configuration for Husarion Lynx
+#  HYBRID QF + Dual EKF + NavSat setup for Husarion Lynx
 #
-#  IDENTICAL parameters to baseline_ekf.yaml.
-#  Key difference: all sensor topics point to /filtered variants
-#  produced by quantum_filter_node.py
+#  same params like baseline_ekf.yaml.
+#  big diff: all sensor topics go to /filtered
+#  made by quantum_filter_node.py
 #
-#  Architecture:
-#    EKF #1 (odom frame) — local odometry fusion (wheel + visual + lidar + IMU)
-#    EKF #2 (map frame)  — global estimate (wheel + GPS + visual + lidar + IMU)
-#    navsat_transform     — converts GPS lat/lon to local XY for EKF #2
+#  Big picture:
+#    EKF #1 (odom frame) — local odom mix (wheel + visual + lidar + IMU)
+#    EKF #2 (map frame)  — global guess (wheel + GPS + visual + lidar + IMU)
+#    navsat_transform     — turn GPS lat/lon to local XY for EKF #2
 # =============================================================================
 
 # --------------------------------------------------------------------------
 #  EKF #1 — Local Odometry (odom frame)
-#  Fuses: wheel odom + visual odom + lidar odom + IMU
+#  Mix: wheel odom + visual odom + lidar odom + IMU
 # --------------------------------------------------------------------------
 ekf_filter_node_fusion:
   ros__parameters:
@@ -32,7 +32,7 @@ ekf_filter_node_fusion:
     base_link_frame: base_link
     world_frame: odom
 
-    # --- Wheel Odometry (velocities only) — raw topic; RQNN bypass (<1% benefit) ---
+    # --- Wheel Odometry (vel only) — raw topic; RQNN bypass (<1% benefit) ---
     odom0: /diff_drive_controller/odom
     odom0_config: [false, false, false,
                    false, false, false,
@@ -44,7 +44,7 @@ ekf_filter_node_fusion:
     odom0_relative: false
 
     # --- Visual Odometry (position only, no yaw) ---
-    # Yaw disabled: VO on featureless agri terrain → erratic heading → EKF oscillation.
+    # yaw off: VO on flat agri land → crazy heading → EKF shake.
     odom1: /odometry/visual/filtered
     odom1_config: [true,  true,  false,
                    false, false, false,
@@ -56,9 +56,9 @@ ekf_filter_node_fusion:
     odom1_relative: false
     odom1_pose_rejection_threshold: 1.5
 
-    # --- LiDAR Odometry (position + yaw) — raw topic; RQNN degrades by −2.5%→−7.9% ---
-    # Yaw RE-ENABLED: ICP yaw anchors local EKF against IMU gyro bias accumulation.
-    # Without it, odom frame yaw drifts ~3°/min → map→odom grows unboundedly.
+    # --- LiDAR Odometry (position + yaw) — raw topic; RQNN worse by −2.5%→−7.9% ---
+    # yaw re-on: ICP yaw hold local EKF vs IMU gyro bias build.
+    # without it, odom yaw drift ~3°/min → map→odom go crazy big.
     odom2: /odometry/lidar
     odom2_config: [true,  true,  false,
                    false, false, true,
@@ -70,7 +70,7 @@ ekf_filter_node_fusion:
     odom2_relative: false
     odom2_pose_rejection_threshold: 2.0
 
-    # --- IMU ---
+    # IMU
     imu0: /imu/data/filtered
     imu0_config: [false, false, false,
                   false, false, false,
@@ -94,10 +94,10 @@ ekf_filter_node_fusion:
     acceleration_gains:     [0.8,   0.0,   0.0,   0.0,   0.0,   0.9]
     deceleration_gains:     [1.0,   0.0,   0.0,   0.0,   0.0,   1.0]
 
-    # --- Process Noise (Q matrix) — Tightened vs baseline; pre-filtered inputs allow lower values ---
-    #  x,y:    0.025→0.015 (LiDAR+visual pose inputs now cleaner)
-    #  vx,vy:  0.04→0.02   (wheel vx + IMU ax well-filtered)
-    #  vyaw:   0.02→0.01   (IMU gx/gy 100% filtered; gz 12.8% — covariance reflects this)
+    # --- Process Noise (Q matrix) — tighter than baseline; filtered inputs let lower values ---
+    #  x,y:    0.025→0.015 (LiDAR+visual pose inputs cleaner now)
+    #  vx,vy:  0.04→0.02   (wheel vx + IMU ax filtered good)
+    #  vyaw:   0.02→0.01   (IMU gx/gy 100% filtered; gz 12.8% — cov show this)
     #                                x       y       z       roll    pitch   yaw     vx      vy      vz      vroll   vpitch  vyaw    ax      ay      az
     process_noise_covariance: [0.015,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.015,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
@@ -134,7 +134,7 @@ ekf_filter_node_fusion:
 
 # --------------------------------------------------------------------------
 #  EKF #2 — Global Map (map frame)
-#  Fuses: wheel odom + GPS + visual odom + lidar odom + IMU
+#  Mix: wheel odom + GPS + visual odom + lidar odom + IMU
 # --------------------------------------------------------------------------
 ekf_filter_node_map:
   ros__parameters:
@@ -153,7 +153,7 @@ ekf_filter_node_map:
     base_link_frame: base_link
     world_frame: map
 
-    # --- Wheel Odometry (velocities only) ---
+    # --- Wheel Odometry (vel only) ---
     odom0: /diff_drive_controller/odom
     odom0_config: [false, false, false,
                    false, false, false,
@@ -188,7 +188,7 @@ ekf_filter_node_map:
     odom2_relative: false
     odom2_pose_rejection_threshold: 3.0
 
-    # --- IMU ---
+    # IMU
     imu0: /imu/data/filtered
     imu0_config: [false, false, false,
                   false, false, false,
@@ -203,15 +203,15 @@ ekf_filter_node_map:
     imu0_twist_rejection_threshold: 0.8
     imu0_linear_acceleration_rejection_threshold: 0.8
 
-    # GPS removed from EKF#2: position updates build P[x,θ] cross-terms → yaw coupling
-    # during motion → map-frame flicker. Without GPS, EKF#2 mirrors EKF#1 in map frame;
-    # map→odom stays near-zero and stable.
+    # GPS removed from EKF#2: position update make P[x,θ] cross-term → yaw couple
+    # when moving → map frame flicker. no GPS, EKF#2 copy EKF#1 in map frame;
+    # map→odom stay near-zero and stable.
 
     use_control: false
 
-    # Process noise — x,y 0.025: match baseline tuning. 0.1 was 4x looser → map frame
-    # oscillated more than baseline because the EKF wandered further between GPS corrections,
-    # then snapped back impulsively. vx,vy 0.25→0.05: high velocity noise amplified GPS jumps.
+    # process noise — x,y 0.025: match baseline tune. 0.1 was 4x loose → map frame
+    # swing more than baseline because EKF wander far between GPS fix,
+    # then snap back hard. vx,vy 0.25→0.05: big velocity noise make GPS jump worse.
     process_noise_covariance: [0.025,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.025,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
@@ -228,7 +228,7 @@ ekf_filter_node_map:
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.015]
 
-    # Robot spawns at map origin — known position/orientation → start with near-zero uncertainty.
+    # Robot spawn at map origin — position/orient known → start with near-zero unsure.
     initial_estimate_covariance: [1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                   0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
                                   0.0,  0.0,  1e-9, 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0,
@@ -251,15 +251,15 @@ ekf_filter_node_map:
 # --------------------------------------------------------------------------
 navsat_transform:
   ros__parameters:
-    frequency: 1.0       # reduced 10→1Hz: GPS updates → EKF#2 yaw coupling; slower = stabler map frame
+    frequency: 1.0       # drop 10→1Hz: GPS update → EKF#2 yaw couple; slower = more stable map frame
     delay: 0.0
     magnetic_declination_radians: 0.0
     yaw_offset: 0.0
     zero_altitude: true
     publish_filtered_gps: true
-    use_odometry_yaw: true       # Safe: navsat reads odometry/local (EKF#1, no GPS → no circular loop).
-    # NO datum param: navsat locks to robot's first GPS fix at startup (spawn position).
-    # Map origin = wherever robot was when navsat initialized (t=12s, robot still at spawn).
+    use_odometry_yaw: true       # safe: navsat read odom/local (EKF#1, no GPS → no loop back).
+    # NO datum param: navsat lock to robot first GPS fix at startup (spawn place).
+    # Map origin = wherever robot was when navsat init (t=12s, robot still at spawn).
     wait_for_datum: false
     broadcast_cartesian_transform: false
     broadcast_cartesian_transform_as_parent_frame: false

@@ -1,0 +1,9 @@
+Reverted to original-conservative values. State now:
+
+Param	Value	File
+relay GPS_VAR_HORIZONTAL	9.0	gps_covariance_relay.py:17
+EKF#2 x,y proc noise	0.025	baseline_ekf.yaml:227
+EKF#2 vx,vy proc noise	0.05	baseline_ekf.yaml:233
+navsat freq	1.0 Hz	baseline_ekf.yaml:268
+odom3 GPS in EKF#2	active	baseline_ekf.yaml:216
+GPS now feeds at 1Hz with very loose covariance — minimal pull. If still drifting, last knob: tighten gate.

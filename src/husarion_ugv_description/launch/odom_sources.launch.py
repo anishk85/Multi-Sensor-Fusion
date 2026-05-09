@@ -64,29 +64,25 @@ def generate_launch_description():
                 "subscribe_rgbd": False,
                 "approx_sync": True,
                 "wait_imu_to_init": False,
-                # --- Hardened VO tuning for sparse agricultural terrain ---
-                # GFTT (0) = Good Features To Track — most stable for sim
+                # --- tuning for dirt ground ---
+                # GFTT is good
                 "Vis/FeatureType": "0",
-                # More features = more robust matching on sparse terrain
+                # need more feature because dirt is empty
                 "Vis/MaxFeatures": "2000",
-                # PnP estimation for RGBD (needs valid depth)
+                # PnP
                 "Vis/EstimationType": "1",
-                # Lowered 15→6: agricultural terrain has 7-14 visible features max;
-                # 15 caused perpetual reset loop (0 inliers, reset, repeat).
-                # 6 = minimum for PnP solve with margin.
+                # 6 inlier. 15 is too much, make reset loop.
                 "Vis/MinInliers": "6",
-                # Larger local map for better frame-to-map matching
+                # big map
                 "OdomF2M/MaxSize": "4000",
                 "OdomF2M/MaxNewFeatures": "500",
-                # Don't reset too quickly — resets create sudden jumps
+                # no quick reset
                 "Odom/ResetCountdown": "5",
-                # KEY: Clamp max velocity to reject impossible estimates
+                # clamp velocity
                 "Odom/FilteringStrategy": "1",
-                # Increase keyframe threshold to reduce drift accumulation
+                # keyframe
                 "Odom/KeyFrameThr": "0.3",
-                # Disabled: motion model after reset gives wrong initial guess →
-                # RANSAC searches wrong region → 0 inliers → reset loop.
-                # Without guess, RANSAC searches globally → finds inliers.
+                # no guess motion. it guess wrong and fail.
                 "Odom/GuessMotion": "false",
             }
         ],

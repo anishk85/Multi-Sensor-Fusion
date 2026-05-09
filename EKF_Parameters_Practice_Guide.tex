@@ -1,0 +1,1506 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,amsfonts}
+\usepackage{mathtools}
+\setcounter{MaxMatrixCols}{20}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{titling}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{tcolorbox}
+\tcbuselibrary{breakable}
+\usepackage{longtable}
+
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
+
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codekw}{RGB}{0,0,180}
+\definecolor{codecmt}{RGB}{0,128,0}
+\definecolor{codestr}{RGB}{180,0,0}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{codebg},
+    commentstyle=\color{codecmt}\itshape,
+    keywordstyle=\color{codekw}\bfseries,
+    stringstyle=\color{codestr},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2,
+    frame=single,
+    framerule=0.4pt,
+    rulecolor=\color{black!30}
+}
+\lstset{style=mystyle}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    citecolor=green!60!black,
+    urlcolor=blue!60!black,
+    pdftitle={EKF Parameters: Theory to Practice},
+    pdfauthor={Multi-Sensor Fusion Project}
+}
+
+\newtcolorbox{paramcard}[1]{colback=blue!3!white,colframe=blue!60!black,fonttitle=\bfseries\ttfamily,title=#1,breakable}
+\newtcolorbox{warnbox}[1]{colback=red!5!white,colframe=red!75!black,fonttitle=\bfseries,title=#1,breakable}
+\newtcolorbox{insightbox}[1]{colback=green!5!white,colframe=green!50!black,fonttitle=\bfseries,title=#1,breakable}
+\newtcolorbox{intuitionbox}[1]{colback=yellow!5!white,colframe=orange!75!black,fonttitle=\bfseries,title=#1,breakable}
+\newtcolorbox{mathbox}[1]{colback=violet!3!white,colframe=violet!60!black,fonttitle=\bfseries,title=#1,breakable}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small EKF Parameters --- Theory to Practice}
+\fancyhead[R]{\small Husarion Lynx Project}
+\fancyfoot[C]{\thepage}
+
+\title{\Huge\bfseries EKF Parameters\\[0.4em]\Large Theory $\leftrightarrow$ Practice\\[0.3em]\large Each Knob Explained:\\Intuition, Math, Effect\\[0.5em]\normalsize\itshape Husarion Lynx --- \texttt{robot\_localization} dual-EKF + NavSat}
+\author{Multi-Sensor Fusion Project}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent Companion guide to the EKF Deep Dive document. Where the deep dive built theory bottom-up, this document goes parameter-by-parameter through the actual \texttt{robot\_localization} configuration used in the Husarion Lynx project (\texttt{dual\_ekf\_navsat.yaml}), explaining for every knob: (i) what the parameter does mechanically inside the EKF; (ii) the mathematical equation it appears in; (iii) the intuition --- what increasing or decreasing it physically means; (iv) the effect on filter behavior; (v) typical failure modes when misconfigured; (vi) how to tune it. Notation throughout follows Thrun-Burgard-Fox: state mean $\mu_t$, covariance $\Sigma_t$, motion noise covariance $R_t$, measurement noise covariance $Q_t$. Note: the \texttt{robot\_localization} YAML uses the engineering convention where the YAML key \texttt{process\_noise\_covariance} stores what we call $R_t$ in Thrun notation.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{The Three EKFs in this Project}
+% ============================================================
+
+The Husarion Lynx setup runs three EKF instances plus one transform node. Understanding which one each parameter belongs to is the first step.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{3.2cm} p{2.0cm} p{4.5cm} p{3.5cm}}
+\toprule
+\textbf{Node} & \textbf{Frame} & \textbf{Inputs} & \textbf{Outputs} \\
+\midrule
+\texttt{ekf\_filter\_node\_odom} (EKF \#1, Local) & \texttt{world\_frame: odom} & wheel + IMU + VO + LiDAR + control & \texttt{/odometry/filtered}, TF \texttt{odom}$\to$\texttt{base\_link} \\
+\texttt{ekf\_filter\_node\_map} (EKF \#2, Global) & \texttt{world\_frame: map} & wheel + IMU + VO + LiDAR (\textbf{NO GPS}) & \texttt{/odometry/filtered\_map}, TF \texttt{map}$\to$\texttt{odom} \\
+\texttt{navsat\_transform} & --- & GPS (\texttt{NavSatFix}) + IMU + \texttt{/odometry/filtered} & \texttt{/odometry/gps} (analysis only) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{warnbox}{Critical Architectural Decision}
+This project deliberately departs from the canonical \texttt{robot\_localization} dual-EKF + NavSat tutorial. \textbf{GPS is NOT fused into EKF \#2.} Both EKFs receive identical sensor inputs (wheel + IMU + VO + LiDAR), differing only in \texttt{world\_frame}.
+
+\textbf{Reason}: GPS noise injected through cross-covariance terms $\Sigma_{x,\psi}$ and $\Sigma_{y,\psi}$ caused sustained map frame yaw drift of $\sim 3.56°/$s in earlier configurations. Without a strong absolute yaw observation (no magnetometer in this Gazebo IMU, no dual-antenna RTK), nothing in the filter can fight the leak. The covariance cross-term problem is the single most important reason to read this document carefully before re-enabling GPS in EKF \#2.
+
+GPS still flows through the pipeline (\texttt{navsat\_transform\_node} runs, \texttt{/odometry/gps} is published) but neither EKF subscribes to that topic. GPS is available for offline analysis notebooks comparing filter output to GPS truth, but does \emph{not} influence the live state estimate.
+
+See Section~\ref{sec:gps-exclusion} for the full mathematical derivation, numerical example, trade-offs, and alternatives.
+\end{warnbox}
+
+\textbf{Why this dual-EKF then?} With both EKFs receiving identical inputs, the resulting estimates converge to nearly the same value, so $T_{\text{map}}^{\text{odom}} \approx I$. EKF \#1 publishes \texttt{odom}$\to$\texttt{base\_link} for the controller (smooth, continuous). EKF \#2 publishes \texttt{map}$\to$\texttt{odom} (near-identity, also smooth in this setup). The map frame is \emph{anchored at the robot's spawn position} via sensor consensus, not GPS.
+
+\textbf{Sensor noise measured} for this hardware (from \texttt{plots/summary.md}):
+\begin{itemize}
+\item GPS: $\sigma_{\text{lat}}^2 = 0.263$ m$^2$, $\sigma_{\text{lon}}^2 = 0.245$ m$^2$, $\sigma_{\text{alt}}^2 = 1.230$ m$^2$
+\item IMU gyro: $\sigma_x^2 = 2.26 \times 10^{-4}$, $\sigma_y^2 = 1.46 \times 10^{-3}$, $\sigma_z^2 = 4.16 \times 10^{-2}$ (rad/s)$^2$
+\item IMU accel: $\sigma_x^2 = 0.97$, $\sigma_y^2 = 0.57$, $\sigma_z^2 = 0.69$ (m/s$^2$)$^2$
+\item Wheel odom: pose\_cov $= 0.001$, twist\_cov $= 0.001$ (from \texttt{diff\_drive\_controller})
+\item Map frame stability (current config, GPS excluded): $\pm 0.1$ m, $\pm 1°$ over 2 minutes
+\end{itemize}
+
+\textbf{Notation reminder.} In the YAML keys, \texttt{process\_noise\_covariance} corresponds to Thrun's $R_t$ (motion uncertainty). The covariance fields inside each \texttt{nav\_msgs/Odometry} or \texttt{sensor\_msgs/Imu} message correspond to Thrun's $Q_t$ (measurement uncertainty).
+
+% ============================================================
+\section{State Vector Refresher}
+% ============================================================
+
+Every \texttt{ekf\_node} in \texttt{robot\_localization} maintains a 15-dimensional state:
+
+\[
+\mu_t = [\,\underbrace{x, y, z}_{\text{position}},\, \underbrace{\phi, \theta, \psi}_{\text{roll, pitch, yaw}},\, \underbrace{\dot{x}, \dot{y}, \dot{z}}_{\text{linear vel}},\, \underbrace{\dot{\phi}, \dot{\theta}, \dot{\psi}}_{\text{angular vel}},\, \underbrace{\ddot{x}, \ddot{y}, \ddot{z}}_{\text{linear accel}}\,]^\top
+\]
+
+Every parameter that takes a 15-element list (e.g., \texttt{process\_noise\_covariance} diagonal, \texttt{initial\_estimate\_covariance} diagonal) maps element-wise to this ordering. Memorise the order: position, RPY, linear velocities, angular velocities, linear accelerations.
+
+\textbf{Index reference:}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{cc|cc|cc}
+\toprule
+Idx & Component & Idx & Component & Idx & Component \\
+\midrule
+0 & $x$ & 5 & $\psi$ (yaw) & 10 & $\dot{\theta}$ \\
+1 & $y$ & 6 & $\dot{x}$ (vx) & 11 & $\dot{\psi}$ (vyaw) \\
+2 & $z$ & 7 & $\dot{y}$ (vy) & 12 & $\ddot{x}$ (ax) \\
+3 & $\phi$ (roll) & 8 & $\dot{z}$ (vz) & 13 & $\ddot{y}$ (ay) \\
+4 & $\theta$ (pitch) & 9 & $\dot{\phi}$ (vroll) & 14 & $\ddot{z}$ (az) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section{Frame Parameters}
+% ============================================================
+
+These define the coordinate frames in the TF tree.
+
+\begin{paramcard}{map\_frame}
+\textbf{Type:} string \quad \textbf{Project value:} \texttt{map}
+
+\textbf{What:} Name of the global, world-fixed reference frame.
+
+\textbf{Math role:} The frame in which $\mu_t$ is expressed when \texttt{world\_frame: map}. All transforms involving GPS, ENU coordinates terminate here.
+
+\textbf{Intuition:} ``The unmoving big-picture frame.'' If you stood outside the robot with a god-view, this is your frame. Origin is set by GPS datum or pre-defined.
+
+\textbf{Effect:} Only meaningful for the \emph{global} EKF (EKF \#2). Local EKF still has it set but ignores it (since \texttt{world\_frame: odom}). Must match across all nodes that share a TF tree.
+
+\textbf{Failure mode:} Misnaming silently disconnects the TF tree --- planner finds no path to base\_link.
+\end{paramcard}
+
+\begin{paramcard}{odom\_frame}
+\textbf{Type:} string \quad \textbf{Project value:} \texttt{odom}
+
+\textbf{What:} Name of the locally drifting world-fixed reference frame.
+
+\textbf{Math role:} The frame for $\mu_t$ when \texttt{world\_frame: odom}. The local EKF (EKF \#1, EKF \#3) operates here.
+
+\textbf{Intuition:} ``Where the robot thinks it is, ignoring GPS.'' Drifts with time but is locally smooth and continuous --- exactly what the controller needs.
+
+\textbf{Effect:} The local EKF publishes \texttt{odom}$\to$\texttt{base\_link}. The global EKF publishes \texttt{map}$\to$\texttt{odom}. The composition gives global pose.
+
+\textbf{Failure mode:} If two nodes claim to publish \texttt{odom}$\to$\texttt{base\_link}, TF tree breaks (tf complains about multiple parents).
+\end{paramcard}
+
+\begin{paramcard}{base\_link\_frame}
+\textbf{Type:} string \quad \textbf{Project value:} \texttt{base\_link}
+
+\textbf{What:} Frame rigidly attached to robot body.
+
+\textbf{Math role:} All sensor measurements are transformed into this frame using static transforms from URDF before fusion. The motion model $g(u_t, \mu_{t-1})$ predicts the pose of \texttt{base\_link} relative to the world frame.
+
+\textbf{Intuition:} ``The robot itself.'' Convention: $+x$ forward, $+y$ left, $+z$ up (right-hand rule).
+
+\textbf{Effect:} All input sensor messages must have their \texttt{frame\_id} resolvable to \texttt{base\_link} via static TF. Wrong sensor frame $\to$ measurement applied at wrong rotation/translation $\to$ filter biases.
+\end{paramcard}
+
+\begin{paramcard}{world\_frame}
+\textbf{Type:} string \quad \textbf{Project value:} \texttt{odom} (EKF \#1, \#3) / \texttt{map} (EKF \#2)
+
+\textbf{What:} The frame in which the EKF maintains its state estimate.
+
+\textbf{Math role:} Determines which TF transform the node publishes:
+\begin{itemize}
+\item \texttt{world\_frame == odom\_frame}: publishes \texttt{odom}$\to$\texttt{base\_link}
+\item \texttt{world\_frame == map\_frame}: publishes \texttt{map}$\to$\texttt{odom} (computed as $T_{\text{map}}^{\text{base}} \cdot (T_{\text{odom}}^{\text{base}})^{-1}$)
+\end{itemize}
+
+\textbf{Intuition:} \emph{This is the most important frame parameter.} Sets which role the EKF plays --- local smoother or global corrector.
+
+\textbf{Effect:} The dual-EKF architecture exists exactly because of this parameter. Two filters, two values, decoupled transforms.
+
+\textbf{Failure mode:} Both EKFs running with same \texttt{world\_frame} $\to$ TF conflict.
+\end{paramcard}
+
+% ============================================================
+\section{Timing Parameters}
+% ============================================================
+
+\begin{paramcard}{frequency}
+\textbf{Type:} double, Hz \quad \textbf{Project value:} 50.0 (EKFs) / 10.0 (navsat)
+
+\textbf{What:} How often the EKF runs its predict step and publishes output.
+
+\textbf{Math role:} Determines $\Delta t$ used in:
+\begin{itemize}
+\item Motion model integration: $\bar{\mu}_t = g(u_t, \mu_{t-1})$ uses $\Delta t = 1/\text{frequency}$
+\item Process noise scaling: $\bar{\Sigma}_t = G_t\, \Sigma_{t-1}\, G_t^\top + R_t \cdot \Delta t$
+\item Jacobian evaluation point and step size
+\end{itemize}
+
+\textbf{Intuition:} ``How often does the filter take a heartbeat?'' Higher = smoother output, more CPU. Lower = jerkier, lighter.
+
+\textbf{Effect of increasing (e.g., 50 $\to$ 100 Hz):}
+\begin{itemize}
+\item Smaller $\Delta t$ per step $\to$ less linearisation error per step (Taylor expansion more accurate over smaller interval)
+\item More frequent predictions absorb sensor jitter better
+\item CPU load increases linearly
+\item Diminishing returns past sensor rates --- predicting faster than sensors update gains nothing
+\end{itemize}
+
+\textbf{Effect of decreasing (e.g., 50 $\to$ 10 Hz):}
+\begin{itemize}
+\item Larger $\Delta t$ per step $\to$ more linearisation error
+\item Output less smooth --- controller may oscillate
+\item For nonlinear motion ($\omega \neq 0$), arc segments become noticeable
+\end{itemize}
+
+\textbf{Project rationale:} 50 Hz matches the IMU rate (typically 100 Hz raw $\to$ filtered to 50). Higher frequency than fastest sensor wastes CPU. \texttt{navsat\_transform} runs at 10 Hz to match the GPS update rate.
+
+\textbf{Tuning rule:} Set to the rate of your fastest critical sensor, or what the controller expects (Nav2 typically wants $\geq 30$ Hz odometry).
+\end{paramcard}
+
+\begin{paramcard}{sensor\_timeout}
+\textbf{Type:} double, seconds \quad \textbf{Project value:} 0.1
+
+\textbf{What:} If no measurement arrives within this window, the EKF skips correction this cycle and just predicts.
+
+\textbf{Math role:} Controls when the filter falls into \emph{prediction-only} mode. After timeout:
+\[
+\mu_t = \bar{\mu}_t = g(u_t, \mu_{t-1}), \quad \Sigma_t = \bar{\Sigma}_t = G_t \Sigma_{t-1} G_t^\top + R_t
+\]
+without any correction step. Uncertainty grows unboundedly during this period.
+
+\textbf{Intuition:} ``How long do I wait for a sensor before giving up?'' Trade-off: too short = drops occasional late messages; too long = filter waits for stale data, output stale.
+
+\textbf{Effect:}
+\begin{itemize}
+\item Short (0.05 s): aggressive, predicts often, robust to dropped messages
+\item Long (0.5 s): conservative, may freeze on first sensor disconnect
+\end{itemize}
+
+\textbf{Project value 0.1 s:} matches 1/frequency = 1/50 = 0.02 s with 5x slack. Sensor offline for $>$ 0.1 s $\to$ predict-only.
+
+\textbf{Failure mode:} Set too low with jittery sensors $\to$ filter stutters.
+\end{paramcard}
+
+\begin{paramcard}{transform\_time\_offset}
+\textbf{Type:} double, seconds \quad \textbf{Project value:} 0.0
+
+\textbf{What:} Adds a future timestamp offset to published TF, so other nodes can do future-time lookups.
+
+\textbf{Math role:} Pure metadata --- shifts the timestamp on the published \texttt{TransformStamped}. State estimate unchanged.
+
+\textbf{Intuition:} ``Backdate or future-date my TF transforms.'' Useful when consumers want to predict slightly into the future.
+
+\textbf{Effect:}
+\begin{itemize}
+\item 0.0 (project): TF timestamp = filter timestamp. Standard.
+\item 0.1: published TF claims to be valid for 0.1 s into future. Reduces ``extrapolation'' warnings in TF lookups by Nav2.
+\end{itemize}
+\end{paramcard}
+
+\begin{paramcard}{transform\_timeout}
+\textbf{Type:} double, seconds \quad \textbf{Project value:} 0.0
+
+\textbf{What:} How long the TF buffer holds onto the previous transform if a new one is delayed.
+
+\textbf{Math role:} TF interpolation/extrapolation buffer.
+
+\textbf{Effect:} 0.0 means no timeout --- always serve latest. Tweak if downstream consumers are missing transforms.
+\end{paramcard}
+
+% ============================================================
+\section{Mode Parameters}
+% ============================================================
+
+\begin{paramcard}{two\_d\_mode}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Constrains state to planar motion. $z, \phi, \theta, \dot{z}, \dot{\phi}, \dot{\theta}, \ddot{z}$ are clamped to zero.
+
+\textbf{Math role:} Effectively reduces the 15-D state to an 8-D state $[x, y, \psi, \dot{x}, \dot{y}, \dot{\psi}, \ddot{x}, \ddot{y}]^\top$. Internally implemented by zero-ing rows/columns 2, 3, 4, 8, 9, 10, 14 of $\bar{\Sigma}_t$ after each update.
+
+\textbf{Intuition:} ``This robot doesn't fly or fall.'' Skips degrees of freedom your robot physically can't have.
+
+\textbf{Effect of \texttt{true}:}
+\begin{itemize}
+\item Prevents IMU pitch/roll noise from corrupting yaw estimate via cross-correlation
+\item Prevents drift in $z$ from accumulated accelerometer error
+\item Reduces effective state dimension $\to$ better-conditioned filter
+\end{itemize}
+
+\textbf{Effect of \texttt{false}:}
+\begin{itemize}
+\item Full 6-DOF tracking --- needed for drones, climbing robots, ramps
+\item Roll/pitch from IMU integrated. Useful but introduces noise into $\psi$ via Coriolis/correlation
+\end{itemize}
+
+\textbf{Project rationale:} Lynx is a ground robot on flat-ish terrain. \texttt{true} is correct. If running on steep slopes or stairs, set to \texttt{false}.
+
+\textbf{Failure mode:} Setting \texttt{true} when robot actually pitches significantly $\to$ accelerometer measurements get rotated incorrectly (gravity not removed properly), $\to$ horizontal acceleration biases.
+\end{paramcard}
+
+\begin{paramcard}{publish\_tf}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Whether the EKF publishes the world\_frame$\to$base\_link\_frame TF.
+
+\textbf{Effect:} Both EKFs in this project publish their TF (one publishes \texttt{odom}$\to$\texttt{base\_link}, the other \texttt{map}$\to$\texttt{odom}). Setting \texttt{false} means another node must publish that TF (rare).
+
+\textbf{Failure mode:} Two nodes both publishing same TF $\to$ TF tree warnings, intermittent values.
+\end{paramcard}
+
+\begin{paramcard}{publish\_acceleration}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{false}
+
+\textbf{What:} Publishes filtered linear acceleration on \texttt{/accel/filtered}.
+
+\textbf{Effect:} If \texttt{true}, additional message published with $\ddot{x}, \ddot{y}, \ddot{z}$ from state. If consumer cares (e.g., for vibration analysis), enable. Otherwise \texttt{false} saves bandwidth.
+\end{paramcard}
+
+\begin{paramcard}{print\_diagnostics}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Publishes diagnostic info on \texttt{/diagnostics} including measurement queue lengths, transform errors, etc.
+
+\textbf{Effect:} Enabling helps tuning. No runtime cost worth worrying about.
+\end{paramcard}
+
+\begin{paramcard}{debug}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{false}
+
+\textbf{What:} Verbose logging of every measurement, prediction, and correction.
+
+\textbf{Effect:} \texttt{true} produces large debug files. Useful for tuning or post-mortem. Disable in production.
+\end{paramcard}
+
+% ============================================================
+\section{Sensor Input Configuration}
+% ============================================================
+
+For each sensor (\texttt{odom0}, \texttt{odom1}, \texttt{imu0}, \ldots), several parameters control how its data enters the filter.
+
+\subsection{Topic Name (\texttt{odomN}, \texttt{imuN}, \texttt{poseN}, \texttt{twistN})}
+
+\begin{paramcard}{odom0 / imu0 / ...}
+\textbf{Type:} string \quad \textbf{Project values:} \texttt{/diff\_drive\_controller/odom}, \texttt{/imu/data}, \texttt{/odometry/gps}, \texttt{/odometry/visual}, \texttt{/odometry/lidar}
+
+\textbf{What:} ROS topic the EKF subscribes to.
+
+\textbf{Math role:} Each topic provides one stream of measurements $z^{(s)}_t$ with covariance $Q^{(s)}_t$ (where $s$ indexes the sensor). The filter applies the standard EKF correction once per arriving message:
+\[
+K_t = \bar{\Sigma}_t H_t^\top (H_t \bar{\Sigma}_t H_t^\top + Q^{(s)}_t)^{-1}
+\]
+
+\textbf{Effect:} Each sensor enters as an independent correction step. Order of subscriber declaration in YAML doesn't matter; messages are processed in timestamp order.
+
+\textbf{Best practice:} One sensor per topic. Don't merge two encoders into one topic --- their covariances become unrecoverable.
+\end{paramcard}
+
+\subsection{15-Bit Configuration Array}
+
+This is the most important per-sensor parameter. It selects which state components the sensor measures.
+
+\begin{paramcard}{odomN\_config / imuN\_config}
+\textbf{Type:} list of 15 booleans \quad \textbf{Project examples below}
+
+\textbf{What:} 15-element boolean array selecting which state dimensions this sensor contributes to. Mapping matches the state vector indexing.
+
+\[
+\texttt{config} = [b_x, b_y, b_z,\; b_\phi, b_\theta, b_\psi,\; b_{\dot{x}}, b_{\dot{y}}, b_{\dot{z}},\; b_{\dot{\phi}}, b_{\dot{\theta}}, b_{\dot{\psi}},\; b_{\ddot{x}}, b_{\ddot{y}}, b_{\ddot{z}}]
+\]
+
+\textbf{Math role:} Defines the observation matrix $H_t$ (or $C_t$ for linear case). Each \texttt{true} bit becomes a row of $H_t$ that picks out the corresponding state element. Example: if config selects only $\dot{x}$ and $\dot{\psi}$:
+\[
+H_t = \begin{bmatrix} 0 & 0 & 0 & 0 & 0 & 0 & \boxed{1} & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\ 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & \boxed{1} & 0 & 0 & 0 \end{bmatrix}
+\]
+The measurement equation becomes:
+\[
+z_t = \begin{bmatrix}\dot{x} \\ \dot{\psi}\end{bmatrix} + \delta_t
+\]
+The corresponding entries of the message's covariance matrix are extracted to form $Q_t$ for this update.
+
+\textbf{Intuition:} ``Tell the filter what each sensor knows.'' A wheel encoder doesn't measure absolute position; only velocities. A GPS doesn't measure orientation. An IMU doesn't measure position.
+
+\textbf{Project values walked through:}
+
+\textbf{Wheel odometry (EKF \#1, \#2, \#3):}
+\begin{lstlisting}[language=bash]
+odom0_config: [false, false, false,    # x, y, z          NO
+               false, false, false,    # roll, pitch, yaw NO
+               true,  false, false,    # vx, vy, vz       vx YES
+               false, false, true,     # vroll, vp, vyaw  vyaw YES
+               false, false, false]    # ax, ay, az       NO
+\end{lstlisting}
+\textbf{Why:} Wheel encoders give body-frame linear velocity (forward only for diff-drive: $\dot{y}_{\text{body}} = 0$) and yaw rate. Position from \texttt{diff\_drive\_controller} drifts; we let the EKF integrate velocities itself, fusing with IMU.
+
+\textbf{IMU (all EKFs):}
+\begin{lstlisting}[language=bash]
+imu0_config: [false, false, false,     # NO position
+              true,  true,  true,      # roll, pitch, yaw YES
+              false, false, false,     # NO linear vel
+              true,  true,  true,      # ALL angular vels YES
+              true,  true,  true]      # ALL linear accels YES
+\end{lstlisting}
+\textbf{Why:} IMU provides absolute roll/pitch from gravity (always reliable), yaw from gyro integration (drifts but high-rate), all angular velocities (raw gyro), and linear accelerations (with gravity removed). Note: yaw can be problematic if magnetometer is bad --- some setups disable bit \#5.
+
+\textbf{GPS via navsat (EKF \#2):}
+\begin{lstlisting}[language=bash]
+odom1_config: [true,  true,  false,    # x, y YES (planar)
+               false, false, false,
+               false, false, false,
+               false, false, false,
+               false, false, false]
+\end{lstlisting}
+\textbf{Why:} GPS gives only absolute $(x, y)$ in map frame. No orientation, no velocity. $z$ disabled (\texttt{zero\_altitude} on navsat).
+
+\textbf{Visual / LiDAR odometry (EKF \#3):}
+\begin{lstlisting}[language=bash]
+odom1_config: [true,  true,  false,    # x, y YES
+               false, false, true,     # yaw YES
+               false, false, false,
+               false, false, false,
+               false, false, false]
+\end{lstlisting}
+\textbf{Why:} Both VO and LO produce 6-DOF poses. In 2D mode we use $(x, y, \psi)$. Velocities not enabled to avoid double-counting (the wheel odom already provides those).
+
+\textbf{Failure mode:} Enabling both pose and twist of the same sensor $\to$ filter receives a measurement and its time-derivative as ``independent,'' artificially over-confident.
+\end{paramcard}
+
+\subsection{Differential Mode}
+
+\begin{paramcard}{odomN\_differential}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{false}
+
+\textbf{What:} If \texttt{true}, the filter treats the difference between consecutive messages as a relative pose change rather than an absolute pose.
+
+\textbf{Math role:} Instead of using $z_t = h(\bar{\mu}_t)$ as absolute pose, it uses:
+\[
+z_t \to (z_t - z_{t-1}) + \mu_{t-1}^{(\text{pose})}
+\]
+i.e., the new pose is the previous filter pose plus the measurement increment.
+
+\textbf{Intuition:} ``Use this sensor's deltas, not its absolute readings.'' Useful when:
+\begin{itemize}
+\item Two sources both report absolute pose but disagree on origin (e.g., two SLAM systems)
+\item You want to avoid GPS-induced jumps in the local filter
+\end{itemize}
+
+\textbf{Effect:}
+\begin{itemize}
+\item \texttt{false} (project): use absolute readings. Standard for one trusted source per modality.
+\item \texttt{true}: differentiate first. Removes constant offsets. Doubles noise (subtraction increases variance).
+\end{itemize}
+
+\textbf{Project rationale:} \texttt{false} everywhere. Wheel odom feeds velocities (already differential by nature). GPS feeds map-frame position which is what we want. Visual/LiDAR feed pose deltas via separate node integration.
+
+\textbf{Failure mode:} Setting \texttt{true} on velocity feeds re-differentiates them $\to$ acceleration measurements with huge variance.
+\end{paramcard}
+
+\begin{paramcard}{odomN\_relative}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{false}
+
+\textbf{What:} If \texttt{true}, treats the first message as the origin --- subsequent messages are offsets from that first pose.
+
+\textbf{Effect:} Useful when sensor reports in its own arbitrary frame. Project does not need this since wheel odom starts at origin and GPS starts at datum.
+\end{paramcard}
+
+\subsection{Queue and Latency}
+
+\begin{paramcard}{odomN\_queue\_size}
+\textbf{Type:} int \quad \textbf{Project value:} 10
+
+\textbf{What:} ROS subscriber queue size for buffering incoming messages.
+
+\textbf{Effect:} Larger absorbs bursts. If sensor publishes at 50 Hz and EKF processes at 50 Hz, queue of 10 holds 0.2 s buffer.
+
+\textbf{Failure mode:} Queue too small + slow processing $\to$ messages dropped (visible in \texttt{/diagnostics}).
+\end{paramcard}
+
+\begin{paramcard}{odomN\_nodelay}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}/\texttt{false} (varies)
+
+\textbf{What:} Sets TCP\_NODELAY on the subscription, disabling Nagle's algorithm to send small messages immediately.
+
+\textbf{Effect:} \texttt{true} reduces latency for small high-rate streams (wheel odom). \texttt{false} default for IMU which already batches.
+\end{paramcard}
+
+% ============================================================
+\section{Measurement Rejection Thresholds}
+% ============================================================
+
+These implement Mahalanobis gating --- rejecting measurements that are too far from the predicted mean.
+
+\begin{paramcard}{imuN / odomN \_pose\_rejection\_threshold (and \_twist / \_linear\_acceleration variants)}
+\textbf{Type:} double, Mahalanobis distance squared \quad \textbf{Project values:} 0.8 (IMU), 3.0 (GPS pose)
+
+\textbf{What:} Maximum Mahalanobis distance for accepting a measurement. Larger distance $\to$ measurement rejected as outlier.
+
+\textbf{Math role:} For each candidate measurement $z_t$, compute:
+\[
+d_M^2 = (z_t - h(\bar{\mu}_t))^\top S_t^{-1} (z_t - h(\bar{\mu}_t)), \qquad S_t = H_t \bar{\Sigma}_t H_t^\top + Q_t
+\]
+Reject if $d_M^2 > \text{threshold}$.
+
+\textbf{Intuition:} ``How surprised do I have to be before I assume the sensor is lying?'' Smaller = stricter, more rejections. Larger = more tolerant, accepts noisy data.
+
+\textbf{Statistical interpretation:} Under the assumption that innovation is zero-mean Gaussian with covariance $S_t$, $d_M^2$ follows $\chi^2_k$ where $k$ is measurement dimension. Common thresholds:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+$k$ & 95\% threshold & 99\% threshold \\
+\midrule
+1 & 3.84 & 6.63 \\
+2 & 5.99 & 9.21 \\
+3 & 7.81 & 11.34 \\
+6 & 12.59 & 16.81 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Project values explained:}
+\begin{itemize}
+\item IMU 0.8: very strict. Reflects high confidence in IMU --- big residual = something else wrong.
+\item GPS 3.0: moderate. GPS is noisy by nature; allow some surprise before rejecting.
+\end{itemize}
+
+\textbf{Effect of decreasing (e.g., 3.0 $\to$ 1.0):}
+\begin{itemize}
+\item More GPS measurements rejected as outliers
+\item Faster recovery from rare GPS spikes (multipath, etc.)
+\item BUT: filter under-corrects when state has genuinely diverged --- can lock to drifted estimate
+\end{itemize}
+
+\textbf{Effect of increasing (e.g., 3.0 $\to$ 100.0):}
+\begin{itemize}
+\item All measurements accepted
+\item Outliers contaminate state
+\item Useful initially during tuning; tighten later
+\end{itemize}
+
+\textbf{Failure mode:} Setting too low + initial covariance set very small (overconfident initial state) $\to$ all measurements rejected, filter drifts forever.
+\end{paramcard}
+
+% ============================================================
+\section{Process Noise Covariance $R_t$}
+% ============================================================
+
+This is the most-tuned parameter. It controls how much the filter ``trusts itself.''
+
+\begin{paramcard}{process\_noise\_covariance}
+\textbf{Type:} 15$\times$15 matrix (225 floats), specified row-major \quad \textbf{Project values: see below}
+
+\textbf{What:} Covariance matrix $R_t$ added to predicted covariance each step. Represents unmodelled state changes per unit time.
+
+\textbf{Math role:} In the predict step:
+\[
+\bar{\Sigma}_t = G_t\, \Sigma_{t-1}\, G_t^\top + R_t \cdot \Delta t
+\]
+(robot\_localization scales $R$ by $\Delta t$ internally so values are per-second.)
+
+\textbf{Intuition:} ``How much can the world change between predictions, beyond what my motion model captures?'' Models:
+\begin{itemize}
+\item Slip and unmodelled dynamics
+\item Wheel radius variation
+\item Calibration error
+\item External forces (wind, ground irregularities)
+\end{itemize}
+
+\textbf{Effect of increasing (e.g., $R_{xx}: 0.05 \to 0.5$):}
+\begin{itemize}
+\item Predicted covariance $\bar{\Sigma}_t$ grows faster
+\item Kalman gain $K_t = \bar{\Sigma}_t H_t^\top S_t^{-1}$ grows
+\item Filter trusts measurements more, follows them faster
+\item Output noisier (less smoothing)
+\end{itemize}
+
+\textbf{Effect of decreasing (e.g., $R_{xx}: 0.05 \to 0.005$):}
+\begin{itemize}
+\item Predicted covariance grows slowly
+\item Kalman gain small --- filter ignores measurements
+\item Output very smooth but slow to respond
+\item Risk: filter believes itself even when wrong (divergence)
+\end{itemize}
+
+\textbf{Project EKF \#1 (odom) diagonal --- exact values:}
+\begin{center}
+\footnotesize
+\begin{tabular}{cccc}
+\toprule
+Index & Component & $R_{ii}$ & Interpretation \\
+\midrule
+0 & $x$ & 0.05 & 22 cm $/\sqrt{\text{s}}$ position uncertainty growth \\
+1 & $y$ & 0.05 & same \\
+2 & $z$ & 0.06 & higher (vertical bouncing on terrain) --- ignored in 2D mode \\
+3 & $\phi$ (roll) & 0.03 & 0.17 rad $/\sqrt{\text{s}}$ \\
+4 & $\theta$ (pitch) & 0.03 & same \\
+5 & $\psi$ (yaw) & 0.06 & 0.24 rad $/\sqrt{\text{s}}$ --- larger because wheel-baseline error \\
+6 & $\dot{x}$ & 0.025 & 0.16 (m/s)/$\sqrt{\text{s}}$ --- forward vel uncertainty \\
+7 & $\dot{y}$ & 0.025 & holonomic constraint enforces, but kept symmetric \\
+8 & $\dot{z}$ & 0.04 & vertical (ignored in 2D) \\
+9 & $\dot{\phi}$ & 0.01 & angular vel small uncertainty \\
+10 & $\dot{\theta}$ & 0.01 & same \\
+11 & $\dot{\psi}$ & 0.02 & yaw rate uncertainty \\
+12 & $\ddot{x}$ & 0.01 & accel uncertainty \\
+13 & $\ddot{y}$ & 0.01 & same \\
+14 & $\ddot{z}$ & 0.015 & gravity residual \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Project EKF \#2 (map) diagonal --- post-debug final values:}
+\begin{center}
+\footnotesize
+\begin{tabular}{ccccp{4.7cm}}
+\toprule
+Index & Component & $R_{ii}$ & vs EKF\#1 & Reason \\
+\midrule
+0  & $x$           & 0.05  & same  & RTK GPS at 1cm $\sigma$ pulls fast; moderate $Q$ stops state lock-in \\
+1  & $y$           & 0.05  & same  & same \\
+5  & $\psi$ (yaw)  & 0.001 & \textbf{60$\times$ tighter} & lock yaw, kill $P[\psi,x]$ coupling that drags yaw on GPS x,y updates \\
+6  & $\dot{x}$     & 0.001 & \textbf{25$\times$ tighter} & non-holonomic: $v_x \approx 0$ unless commanded \\
+7  & $\dot{y}$     & 0.001 & \textbf{25$\times$ tighter} & non-holonomic: $v_y \equiv 0$ for diff-drive \\
+11 & $\dot{\psi}$  & 0.001 & \textbf{20$\times$ tighter} & lock $\omega_z$, anchored by wheel + LiDAR $\Delta\theta$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Why EKF \#2 needs tight velocity / yaw $R$ (post-debug rationale):}
+\begin{itemize}
+\item Old reasoning (loose $R$) assumed consumer GPS at $\sigma\!\approx\!0.5$~m. With RTK at $\sigma\!=\!1$~cm, filter no longer needs to ``flex'' to absorb large GPS jumps.
+\item Loose $Q[\psi]$ lets GPS x,y updates pull yaw via cross-covariance $P[\psi, x]$. Measured: 22$^\circ$ stationary yaw walk in 50~s with $Q[\psi]=0.06$.
+\item Loose $Q[\dot{y}]$ allows $v_y$ state to drift; on diff-drive that is unphysical. Measured: $v_y$ ran to $+7.33$~m/s before being clamped by GPS feedback. Caused 18~m Y drift.
+\item GPS rejection threshold raised to 100$\sigma$ to ensure RTK is always trusted (no realistic outlier scenario at 1~cm noise).
+\end{itemize}
+
+\textbf{Wheel $v_y$ row enabled.} \texttt{odom0\_config[7]: false $\to$ true}. \texttt{diff\_drive\_controller} publishes $v_y\!=\!0$ with cov $0.001$. Without fusing this, EKF~\#2 had no measurement source for $v_y$; only IMU accel (now disabled) or process noise constrained it. Result was velocity runaway.
+
+\textbf{IMU linear acceleration disabled in EKF~\#2.} \texttt{imu0\_config[12..14]: false}. Even with bias\_mean=0, residual accel noise integrates to velocity drift. Wheel + GPS provide all needed constraints in map frame; accel adds no information.
+
+\textbf{Tuning rule of thumb:}
+\begin{enumerate}
+\item Start with project values
+\item Drive a known trajectory
+\item Plot innovation: $\nu_t = z_t - h(\bar{\mu}_t)$
+\item If innovation grows over time (filter drifts) $\to$ increase $R$
+\item If innovation noisy/jumps (filter overshooting) $\to$ decrease $R$ or increase $Q$
+\item Validate with NIS test (see Validation section)
+\end{enumerate}
+
+\textbf{Off-diagonal entries:} Project keeps $R_t$ diagonal (zero off-diagonals). This assumes process noise is uncorrelated across state dimensions. A more accurate model could have $R_{x \dot{x}} \neq 0$ since position and velocity errors are coupled. \texttt{robot\_localization} accepts this but most implementations leave it diagonal.
+\end{paramcard}
+
+\begin{intuitionbox}{Why Yaw $R_{\psi\psi}$ is 0.06 (Twice $R_{\phi\phi}$)}
+The wheel-encoder yaw estimate uses $\omega = (v_R - v_L) / b$ where $b$ is the baseline. A 1\% baseline error becomes a 1\% systematic yaw rate error --- accumulating linearly over distance. Roll and pitch from IMU gravity vector have no such systematic source --- only zero-mean noise. Hence the higher process noise on yaw acknowledges that even with a perfect IMU, yaw can drift due to wheel calibration error.
+\end{intuitionbox}
+
+% ============================================================
+\section{Initial Estimate Covariance $\Sigma_0$}
+% ============================================================
+
+\begin{paramcard}{initial\_estimate\_covariance}
+\textbf{Type:} 15$\times$15 matrix \quad \textbf{Project values: see below}
+
+\textbf{What:} The covariance $\Sigma_0$ at filter startup, before any measurement.
+
+\textbf{Math role:} Just the initial value of $\Sigma_t$ for $t = 0$. Affects the early Kalman gain:
+\[
+K_0 = \Sigma_0 H_0^\top (H_0 \Sigma_0 H_0^\top + Q_0)^{-1}
+\]
+Large $\Sigma_0 \to$ filter trusts first measurement strongly. Small $\Sigma_0 \to$ filter resists initial measurements.
+
+\textbf{Intuition:} ``How much do I know about my starting state?'' If you start at known origin, $\Sigma_0 \approx 0$ (use \texttt{1e-9}). If you start at unknown location, $\Sigma_0$ large.
+
+\textbf{Project EKF \#1 (odom):} all diagonal entries \texttt{1e-9}. \\
+\textbf{Why:} The robot is assumed to start at \texttt{(0, 0, 0)} in odom frame. Origin is the robot's startup pose by definition.
+
+\textbf{Project EKF \#2 (map):} diagonal \texttt{[1.0, 1.0, 1e-9, 1.0, 1.0, 1e-9, 1.0, 1.0, ..., 1.0]} \\
+\textbf{Why:} Map-frame position $(x, y)$ initially \emph{unknown} until first GPS fix. $\Sigma_{xx}^{(0)} = 1.0$ m$^2$ allows the first GPS measurement (covariance 0.26 m$^2$) to dominate via Kalman gain:
+\[
+K \approx \frac{1.0}{1.0 + 0.26} \approx 0.79
+\]
+Filter snaps to GPS quickly. After a few fixes, $\Sigma$ shrinks below GPS variance; gain drops.
+
+\textbf{Effect of decreasing initial covariance below sensor noise:} filter ``trusts'' an unknown initial pose more than the actual measurement --- output anchored to wrong initial value, drifts away.
+
+\textbf{Effect of increasing way past needed:} no harm; filter converges to correct value within a few cycles regardless.
+
+\textbf{Tuning rule:} Set diagonal entries to \texttt{1e-9} for components you start at zero (or known value), and to a few $\sigma^2$ of the sensor that bounds them otherwise.
+\end{paramcard}
+
+% ============================================================
+\section{Control Input Parameters (Local EKF Only)}
+% ============================================================
+
+EKF \#1 and \#3 use \texttt{cmd\_vel} as a control input to improve prediction between sensor updates.
+
+\begin{paramcard}{use\_control}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true} (EKF \#1, \#3) / \texttt{false} (EKF \#2)
+
+\textbf{What:} Whether the EKF subscribes to \texttt{cmd\_vel} and uses it as control input $u_t$ in the motion model.
+
+\textbf{Math role:} With control, the prediction is:
+\[
+\bar{\mu}_t = g(u_t, \mu_{t-1})
+\]
+where $g$ depends on commanded $(v, \omega)$. Without control, $u_t$ is treated as zero or constant velocity --- prediction degenerates to constant-velocity model.
+
+\textbf{Intuition:} ``I know what I told the robot to do; use that to predict.'' Helps when sensors are silent or stale.
+
+\textbf{Effect:}
+\begin{itemize}
+\item \texttt{true}: prediction follows command, filter snappier
+\item \texttt{false}: relies entirely on past state + sensors. Smoother in steady-state but worse during transients.
+\end{itemize}
+
+\textbf{Project rationale:} Local EKF benefits from \texttt{cmd\_vel} because wheel feedback has latency. Global EKF doesn't because it operates on already-fused local odometry.
+\end{paramcard}
+
+\begin{paramcard}{control\_config}
+\textbf{Type:} list of 6 booleans, $[\dot{x}, \dot{y}, \dot{z}, \dot{\phi}, \dot{\theta}, \dot{\psi}]$ \quad \textbf{Project value:} \texttt{[true, false, false, false, false, true]}
+
+\textbf{What:} Which fields of \texttt{cmd\_vel} are valid commands.
+
+\textbf{Project value:} only $\dot{x}$ (forward velocity) and $\dot{\psi}$ (yaw rate). Diff-drive constraint --- robot cannot command lateral velocity.
+\end{paramcard}
+
+\begin{paramcard}{acceleration\_limits / deceleration\_limits}
+\textbf{Type:} list of 6 doubles, m/s$^2$ or rad/s$^2$ \quad \textbf{Project value:} \texttt{[1.0, 0, 0, 0, 0, 1.5]}
+
+\textbf{What:} Maximum (de)acceleration the robot can physically achieve.
+
+\textbf{Math role:} Used to limit how fast the predicted velocity can change toward the commanded velocity:
+\[
+\bar{v}_t = \mathrm{clamp}(\bar{v}_t, v_{t-1} - a_{\max}\Delta t, v_{t-1} + a_{\max}\Delta t)
+\]
+
+\textbf{Intuition:} ``This robot has mass. It can't change velocity instantly.''
+
+\textbf{Project values:} 1.0 m/s$^2$ linear, 1.5 rad/s$^2$ angular --- modest values matching small ground robot.
+
+\textbf{Failure mode:} Set too low $\to$ filter doesn't predict sharp commanded changes, lags. Set too high $\to$ filter believes robot can teleport, doesn't smooth.
+\end{paramcard}
+
+\begin{paramcard}{acceleration\_gains / deceleration\_gains}
+\textbf{Type:} list of 6 doubles in $[0, 1]$ \quad \textbf{Project value:} \texttt{[0.8, 0, 0, 0, 0, 0.9]}
+
+\textbf{What:} How fast the robot is expected to ramp acceleration toward commanded value. 1.0 = instant, 0.0 = no response.
+
+\textbf{Math role:} Models actuator dynamics. Predicted acceleration:
+\[
+a_t = g_a \cdot a_{\text{commanded}}
+\]
+
+\textbf{Intuition:} ``Even commanded acceleration is not delivered fully --- there's a control loop in the motors.''
+
+\textbf{Project values:} 0.8 linear, 0.9 yaw --- 80--90\% of commanded acceleration is realised.
+\end{paramcard}
+
+\begin{paramcard}{control\_timeout}
+\textbf{Type:} double, seconds \quad \textbf{Project value:} 0.2
+
+\textbf{What:} If no \texttt{cmd\_vel} arrives within this time, control input is treated as zero.
+
+\textbf{Effect:} Prevents stale commands from biasing prediction when teleop disconnects.
+\end{paramcard}
+
+% ============================================================
+\section{Why GPS is Excluded from EKF \#2 (Covariance Cross-Term Leak)}
+\label{sec:gps-exclusion}
+% ============================================================
+
+This section explains the engineering reason behind this project's most counter-intuitive design decision: removing GPS from EKF \#2. Read carefully before re-enabling.
+
+\subsection{The Cross-Covariance Problem}
+
+The EKF state covariance $\Sigma$ is a dense $15 \times 15$ matrix. Off-diagonal entries $\Sigma_{x,\psi}$ and $\Sigma_{y,\psi}$ encode statistical correlation between position and yaw --- ``if I learn something about $x$, what does it tell me about $\psi$?''
+
+These cross-terms become non-zero whenever the robot moves with $\omega \neq 0$. The motion-model Jacobian:
+\[
+G_t = \begin{bmatrix} 1 & 0 & -v\sin(\mu_\theta)\Delta t \\ 0 & 1 & v\cos(\mu_\theta)\Delta t \\ 0 & 0 & 1 \end{bmatrix}
+\]
+has non-zero $\partial g_x / \partial \psi$ and $\partial g_y / \partial \psi$. Predicted covariance $\bar{\Sigma}_t = G_t\,\Sigma_{t-1}\,G_t^\top + R_t$ inherits these cross-terms. After any curved motion, $\Sigma_{x,\psi}, \Sigma_{y,\psi} \neq 0$.
+
+\subsection{The Leak Path}
+
+GPS measures only $[x, y]$. Observation Jacobian:
+\[
+H_{\text{GPS}} = \begin{bmatrix} 1 & 0 & 0 & 0 & 0 & 0 & \cdots \\ 0 & 1 & 0 & 0 & 0 & 0 & \cdots \end{bmatrix}
+\]
+
+Kalman gain $K_t = \bar{\Sigma}_t H_t^\top S_t^{-1}$ has a row for \emph{every} state component, including yaw. The yaw-row entries:
+\[
+K_{\psi, x} = \frac{\Sigma_{\psi,x}}{\Sigma_{xx} + Q_{\text{GPS}}}, \qquad K_{\psi, y} = \frac{\Sigma_{\psi,y}}{\Sigma_{yy} + Q_{\text{GPS}}}
+\]
+
+Yaw correction:
+\[
+\Delta\psi = K_{\psi,x}\,\nu_x + K_{\psi,y}\,\nu_y
+\]
+where $\nu = z_{\text{GPS}} - h(\bar{\mu}_t)$ is the innovation.
+
+\textbf{GPS noise of 0.5 m produces non-zero innovation every cycle. Yaw moves --- even though GPS never observed yaw.}
+
+\subsection{Numerical Example (Project Values)}
+
+Realistic state after some driving:
+\[
+\Sigma_{xx} = 0.30 \text{ m}^2, \quad \Sigma_{\psi\psi} = 0.02 \text{ rad}^2, \quad \Sigma_{x,\psi} = 0.04
+\]
+
+GPS noise spike $\nu_x = 0.5$ m, $Q_{\text{GPS}} = 0.26$ m$^2$ (your measured GPS variance):
+\[
+K_{\psi,x} = \frac{0.04}{0.30 + 0.26} \approx 0.071
+\]
+\[
+\Delta\psi = 0.071 \cdot 0.5 \approx 0.036 \text{ rad} \approx 2°
+\]
+
+A single GPS fix moved yaw by $2°$. At 10 Hz GPS, sustained walk emerges. Measured drift in this project: $3.56°/$s.
+
+\subsection{Compounding via VO/LiDAR}
+
+Joseph form covariance update:
+\[
+\Sigma_{\psi,x}^{\text{new}} = \Sigma_{\psi,x} - K_{\psi,x}\,\Sigma_{xx}
+\]
+reduces but doesn't zero the cross-term. Next predict step regrows it through $G_t$.
+
+Worse: VO and LiDAR observe \emph{both} position and yaw. Their $H$ matrix has rows for $x, y, \psi$. The Kalman gain spreads VO/LiDAR's $x$-correction into yaw via the now-shaped covariance. Each multi-sensor cycle amplifies the leak.
+
+\subsection{Why the Canonical Tutorial Doesn't Suffer}
+
+Tom Moore's reference example assumes an absolute yaw observation:
+\begin{itemize}
+\item Dual-antenna RTK GPS providing measured heading
+\item Reliable magnetometer with hard/soft-iron calibration
+\item External heading reference (compass, sun sensor)
+\end{itemize}
+
+That observation has small $Q_\psi$. Kalman gain heavily weights the direct yaw measurement, dominating the indirect leak from cross-terms. Yaw stays bounded.
+
+\textbf{This project has none of those.} Gazebo IMU has no magnetometer; ``absolute'' yaw is integrated gyro --- drifts $> 150°$ in 2 minutes by itself. Nothing fights the leak.
+
+\subsection{The Sensor Consensus Solution}
+
+Remove GPS from EKF \#2. Both EKFs now process identical sensor sets:
+\[
+\mu_t^{(\text{global})} \approx \mu_t^{(\text{local})} \implies T_{\text{map}}^{\text{odom}} \approx I
+\]
+
+Map frame stays near-identity to odom frame. No GPS-driven cross-term injection. Map frame angularly stable.
+
+\textbf{Empirical evidence in this project:}
+\begin{itemize}
+\item Earlier config (GPS in EKF \#2): map yaw drifted at $3.56°/$s, accumulating $> 200°$ in 2 minutes --- catastrophic for navigation.
+\item Current config (GPS removed): map$\to$odom transform stays within $\pm 0.1$ m and $\pm 1°$ over 2-minute run.
+\item Disable GPS $\to$ drift disappears. Re-enable $\to$ drift returns.
+\end{itemize}
+
+\subsection{Trade-Off}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{4cm} p{4cm} p{4cm}}
+\toprule
+\textbf{Aspect} & \textbf{GPS in EKF \#2} & \textbf{GPS excluded (project)} \\
+\midrule
+Yaw stability & drifts $\sim 3.56°/$s & rock solid \\
+Global anchoring & yes (cm-m accuracy) & no (drifts with odom) \\
+Re-anchorable to lat/lon & yes & no, only spawn-relative \\
+Best for & open outdoor + RTK + magnetometer & indoor / GPS-denied / short-range \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For most navigation tasks, a stable heading matters more than centimetric global position. A robot drifting $3.56°/$s of yaw will spin in circles trying to reach waypoints. A robot drifting 0.5 m/min of global position can still navigate a 50 m mission.
+
+\subsection{If You Need Global Anchoring Back}
+
+Four options:
+
+\begin{enumerate}
+\item \textbf{Add a strong yaw observation}: dual-antenna RTK, calibrated magnetometer (with hard/soft-iron calibration), or sun sensor. Strong $Q_\psi$ measurement drowns out the leak.
+
+\item \textbf{Diagonalise $\Sigma$ post-GPS-update}: zero out $\Sigma_{x,\psi}$ and $\Sigma_{y,\psi}$ after each GPS correction. Hacky but effective. Requires custom EKF code (not available in stock \texttt{robot\_localization}).
+
+\item \textbf{Loosely-coupled GPS}: run a separate filter that consumes only EKF \#2 output and GPS, publish a \texttt{utm}$\to$\texttt{map} transform without polluting EKF \#2's state.
+
+\item \textbf{Periodic re-anchoring}: when GPS confidence is high (RTK fix), trigger a one-shot pose reset of EKF \#2 instead of continuous fusion. Resets cross-term to zero, breaks the compounding cycle.
+\end{enumerate}
+
+\subsection{Where to Look in YAML}
+
+Compare the actual project files:
+\begin{itemize}
+\item \texttt{src/husarion\_ugv\_description/config/dual\_ekf\_navsat.yaml} --- canonical-style file with three EKFs, originally had GPS in EKF \#2
+\item \texttt{src/husarion\_ugv\_description/config/baseline\_ekf.yaml} --- current production config, GPS not in EKF \#2 input list
+\item \texttt{src/husarion\_ugv\_description/config/hybrid\_qf\_ekf.yaml} --- experimental quantum filter variant
+\end{itemize}
+
+The relevant block in EKF \#2's section (post-debug, final working):
+\begin{lstlisting}[language=bash]
+ekf_filter_node_map:
+  ros__parameters:
+    world_frame: map
+    use_control: false
+
+    # Wheel: vx, vy (kinematic constraint), vyaw
+    odom0: /diff_drive_controller/odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  false,   # vx, vy, vz
+                   false, false, true,    # vroll, vpitch, vyaw
+                   false, false, false]
+    odom0_differential: false
+
+    # GPS: x, y absolute (RTK, ~1cm noise)
+    odom1: /odometry/gps
+    odom1_config: [true, true, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_pose_rejection_threshold: 100.0  # RTK can't outlier
+    odom1_differential: false
+
+    # LiDAR: yaw absolute, differential mode (Δθ between samples)
+    odom2: /odometry/lidar
+    odom2_config: [false, false, false,
+                   false, false, true,    # yaw only
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom2_differential: true
+
+    # IMU: angular velocity only (no accel - bias integrates to drift)
+    imu0: /imu/data/covariance_fixed
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  true,  true,  true,    # vroll, vpitch, vyaw
+                  false, false, false]   # accel DISABLED
+    imu0_differential: false
+
+    # Tight process noise: lock yaw + velocities (non-holonomic)
+    # Q[x,y]    = 0.05
+    # Q[yaw]    = 0.001
+    # Q[vx,vy]  = 0.001
+    # Q[vyaw]   = 0.001
+\end{lstlisting}
+
+Launch file remap (the topology fix):
+\begin{lstlisting}[language=bash]
+# baseline_ekf.launch.py, navsat_transform node:
+remappings=[
+    ("imu",               "imu/data/covariance_fixed"),
+    ("gps/fix",           "gps/fix/covariance_fixed"),
+    ("odometry/filtered", "odometry/global"),  # NOT odometry/local
+],
+\end{lstlisting}
+
+% ============================================================
+\section{NavSat Transform Parameters}
+% ============================================================
+
+\begin{paramcard}{frequency (navsat)}
+\textbf{Type:} double, Hz \quad \textbf{Project value:} 10.0
+
+\textbf{What:} How often \texttt{navsat\_transform\_node} publishes \texttt{/odometry/gps}.
+
+\textbf{Effect:} Should match GPS update rate. Higher wastes CPU; lower drops fixes.
+\end{paramcard}
+
+\begin{paramcard}{delay}
+\textbf{Type:} double, seconds \quad \textbf{Project value:} 3.0
+
+\textbf{What:} Wait this long after first GPS fix before computing the datum transform.
+
+\textbf{Math role:} Allows the EKF to stabilise its initial estimate before locking the GPS-to-map alignment. The datum is computed from:
+\[
+T_{\text{map}}^{\text{UTM}} = \text{Yaw}(\psi_0) \cdot \text{Translate}(-x_0^{\text{UTM}}, -y_0^{\text{UTM}})
+\]
+where $\psi_0$ is taken from the IMU after \texttt{delay} seconds.
+
+\textbf{Intuition:} ``Wait for everything to settle before snapshotting the world.''
+
+\textbf{Effect of small delay:} initial heading from IMU may be noisy --- map frame misaligned.
+
+\textbf{Effect of large delay:} robot may have moved before datum set --- origin offset.
+\end{paramcard}
+
+\begin{paramcard}{magnetic\_declination\_radians}
+\textbf{Type:} double \quad \textbf{Project value:} 0.0
+
+\textbf{What:} Angle between true north and magnetic north at robot's location.
+
+\textbf{Math role:} Used to align the IMU's magnetometer-derived yaw with true north (UTM grid):
+\[
+\psi_{\text{true}} = \psi_{\text{magnetic}} + \delta_{\text{declination}}
+\]
+
+\textbf{Intuition:} ``Compass doesn't point to true north.'' Varies geographically: $-20^\circ$ to $+20^\circ$ globally.
+
+\textbf{Project value 0.0:} acceptable in simulation (Gazebo provides true north). For real robot at Edinburgh: declination $\approx -1.2^\circ \approx -0.021$ rad. Look up at \url{https://www.ngdc.noaa.gov/geomag-web/}.
+
+\textbf{Failure mode:} Wrong declination $\to$ map frame rotated $\to$ all GPS-derived positions twisted by that angle. Robot ``walks sideways'' relative to map.
+\end{paramcard}
+
+\begin{paramcard}{yaw\_offset}
+\textbf{Type:} double, radians \quad \textbf{Project value:} 0.0
+
+\textbf{What:} Rotation between IMU's zero-yaw direction and the conventional $+x$ axis (East in ENU).
+
+\textbf{Math role:} If IMU's $\psi=0$ points North, but UTM East is the $+x$ axis, you need $\texttt{yaw\_offset} = -\pi/2$.
+
+\textbf{Project value 0.0:} simulator IMU is configured so $\psi = 0$ aligns with $+x$ East.
+
+\textbf{Failure mode:} Most common config error. Robot drives east according to filter but actually drives north. Diagnose by driving in commanded direction and checking GPS.
+\end{paramcard}
+
+\begin{paramcard}{zero\_altitude}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Force altitude in published odometry to zero, regardless of GPS altitude.
+
+\textbf{Effect:} For a planar robot, this prevents GPS altitude noise (1.23 m$^2$ in this project!) from corrupting the $z$ estimate.
+
+\textbf{Project rationale:} Lynx is a ground robot. Altitude irrelevant.
+\end{paramcard}
+
+\begin{paramcard}{publish\_filtered\_gps}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Publishes the EKF's filtered estimate back as a \texttt{NavSatFix} (lat/lon).
+
+\textbf{Effect:} Useful for visualisation in mapping tools (Google Maps, Foxglove). No effect on filter behavior.
+\end{paramcard}
+
+\begin{paramcard}{use\_odometry\_yaw}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{false}
+
+\textbf{What:} If \texttt{true}, takes initial heading from \texttt{/odometry/filtered} (i.e., wheel + IMU fused yaw) instead of raw IMU.
+
+\textbf{Effect:}
+\begin{itemize}
+\item \texttt{false} (project): use IMU yaw at startup --- absolute reference (assuming magnetometer)
+\item \texttt{true}: use fused yaw, which is initially zero (odom frame origin)
+\end{itemize}
+
+Project chose \texttt{false}: relies on IMU's absolute heading sensor for global alignment.
+\end{paramcard}
+
+\begin{paramcard}{wait\_for\_datum}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{false}
+
+\textbf{What:} If \texttt{true}, waits for an explicit \texttt{datum} parameter before computing transforms. If \texttt{false}, uses first GPS fix as datum automatically.
+
+\textbf{Effect:}
+\begin{itemize}
+\item \texttt{false} (project): convenient for tests --- start anywhere, first fix becomes origin
+\item \texttt{true}: requires \texttt{datum: [lat, lon, yaw]} explicitly. Repeatable across runs --- map frame consistent across launches.
+\end{itemize}
+
+\textbf{Production setup:} should use \texttt{true} with a known datum so map frame is consistent across robot restarts.
+\end{paramcard}
+
+\begin{paramcard}{broadcast\_cartesian\_transform}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Whether to publish \texttt{utm}$\to$\texttt{world\_frame} TF.
+
+\textbf{Effect:} Useful for tools that need UTM coordinates directly. Doesn't affect EKF.
+\end{paramcard}
+
+% ============================================================
+\section{Per-Sensor Covariance Override}
+% ============================================================
+
+\begin{paramcard}{odomN\_pose\_covariance\_diagonal / odomN\_twist\_covariance\_diagonal}
+\textbf{Type:} list of 6 doubles \quad \textbf{Project values: see below}
+
+\textbf{What:} Override the message's reported covariance with these values.
+
+\textbf{Math role:} Replaces the diagonal entries of $Q_t$ used in the update step:
+\[
+Q_t^{(s)} = \mathrm{diag}(\text{covariance\_diagonal})
+\]
+
+\textbf{Intuition:} ``Sensor's own covariance is wrong --- use my measured value instead.''
+
+\textbf{Project values (EKF \#3 fusion):}
+\begin{lstlisting}[language=bash]
+# Wheel odom: tight pose/twist (very confident on velocities)
+odom0_pose_covariance_diagonal:  [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+odom0_twist_covariance_diagonal: [0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+
+# Visual odom: looser pose, looser velocity
+odom1_pose_covariance_diagonal:  [0.01, 0.01, 0.01, 0.01, 0.01, 0.05]
+odom1_twist_covariance_diagonal: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+# LiDAR odom: tighter than VO
+odom2_pose_covariance_diagonal:  [0.005, 0.005, 0.005, 0.01, 0.01, 0.02]
+odom2_twist_covariance_diagonal: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+\end{lstlisting}
+
+\textbf{Why these values:}
+\begin{itemize}
+\item \textbf{Wheel} 0.001: trusted velocity source, very tight. Note: trusting position to 0.001 is meaningless because we disable position bits.
+\item \textbf{Visual} 0.01--0.05: VO drifts with distance, monocular has scale issues. Larger yaw covariance (0.05) reflects rotation ambiguity.
+\item \textbf{LiDAR} 0.005--0.02: more accurate than VO in structured environments. Tightest non-wheel source.
+\end{itemize}
+
+\textbf{Tuning order:} Use override only when you know the message's covariance is wrong (very common --- many drivers publish placeholder values like all-1s or all-0s).
+\end{paramcard}
+
+% ============================================================
+\section{IMU-Specific Parameters}
+% ============================================================
+
+\begin{paramcard}{imuN\_remove\_gravitational\_acceleration}
+\textbf{Type:} bool \quad \textbf{Project value:} \texttt{true}
+
+\textbf{What:} Subtracts gravity from accelerometer readings before fusing.
+
+\textbf{Math role:} Raw accel reads:
+\[
+\tilde{a}^b = a^b_{\text{true}} - R^b_w\, g
+\]
+With this flag \texttt{true}, the filter computes:
+\[
+a^b_{\text{linear}} = \tilde{a}^b + R^b_w\, g
+\]
+using the current orientation estimate to rotate gravity into body frame.
+
+\textbf{Intuition:} ``Don't let gravity look like horizontal acceleration when the robot tilts.''
+
+\textbf{Effect of \texttt{true}:}
+\begin{itemize}
+\item Filter receives only motion-induced acceleration
+\item Robust to terrain pitch/roll
+\end{itemize}
+
+\textbf{Effect of \texttt{false}:}
+\begin{itemize}
+\item Filter receives raw $\tilde{a}^b$ including $-R^b_w\, g$
+\item In 2D mode, planar accel includes gravity components when robot pitches
+\item Sensor model $h$ would need to predict gravity itself
+\end{itemize}
+
+\textbf{Failure mode:} \texttt{false} on a sloped robot $\to$ filter believes constant horizontal acceleration $\to$ velocity drifts.
+\end{paramcard}
+
+% ============================================================
+\section{The Big Picture: How Parameters Compose}
+% ============================================================
+
+\subsection{Causal Chain --- One Update Cycle}
+
+Imagine GPS has just arrived. Trace through what happens:
+
+\begin{enumerate}
+\item \textbf{Predict step uses}:
+\begin{itemize}
+\item \texttt{frequency} sets $\Delta t$
+\item \texttt{two\_d\_mode} clamps non-planar dims
+\item \texttt{use\_control}, \texttt{control\_config}, \texttt{acceleration\_limits} shape $g(u_t, \mu_{t-1})$
+\item \texttt{process\_noise\_covariance} provides $R_t$
+\item Result: $\bar{\mu}_t, \bar{\Sigma}_t$
+\end{itemize}
+
+\item \textbf{Sensor message arrives on \texttt{/odometry/gps}}:
+\begin{itemize}
+\item \texttt{odom1} topic identifies it
+\item \texttt{odom1\_config} extracts which dims to use $\to$ builds $H_t$
+\item Message's pose covariance becomes $Q_t$ (or override via \texttt{odom1\_pose\_covariance\_diagonal})
+\item \texttt{odom1\_differential, \_relative} transform the value if set
+\end{itemize}
+
+\item \textbf{Gating}:
+\begin{itemize}
+\item Compute innovation $\nu_t = z_t - h(\bar{\mu}_t)$
+\item Mahalanobis $d_M^2 = \nu_t^\top S_t^{-1} \nu_t$
+\item Compare against \texttt{odom1\_pose\_rejection\_threshold}
+\item Reject if too far
+\end{itemize}
+
+\item \textbf{Update step}:
+\begin{itemize}
+\item Kalman gain $K_t = \bar{\Sigma}_t H_t^\top S_t^{-1}$
+\item State update $\mu_t = \bar{\mu}_t + K_t \nu_t$
+\item Covariance update $\Sigma_t = (I - K_t H_t) \bar{\Sigma}_t$
+\end{itemize}
+
+\item \textbf{Publish}:
+\begin{itemize}
+\item TF if \texttt{publish\_tf}
+\item \texttt{/odometry/filtered\_map} (or \texttt{/odometry/filtered})
+\item Diagnostics if \texttt{print\_diagnostics}
+\end{itemize}
+\end{enumerate}
+
+\subsection{The Trust Triangle}
+
+Three covariances determine the filter's behavior:
+\begin{itemize}
+\item $\Sigma_0$ (initial trust in self)
+\item $R_t$ (ongoing trust in motion model)
+\item $Q_t$ (trust in each sensor)
+\end{itemize}
+
+The Kalman gain magnitude:
+\[
+K_t \sim \frac{\bar{\Sigma}_t}{\bar{\Sigma}_t + Q_t}
+\]
+controls measurement weight. The relative scale of $R_t$ vs $Q_t$ determines steady-state behavior:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Setting} & \textbf{Effect} \\
+\midrule
+$R_t$ large, $Q_t$ small & Trust sensors. Output noisy. Fast response. \\
+$R_t$ small, $Q_t$ large & Trust model. Output smooth. Slow response. \\
+$R_t \sim Q_t$ & Balanced. Typical for well-tuned filter. \\
+$R_t \gg Q_t$ \emph{and} model wrong & Filter chases noisy sensors, output unstable. \\
+$R_t \ll Q_t$ \emph{and} model wrong & Filter ignores sensors, drifts away from truth. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Why EKF \#1 and EKF \#2 Have Different $R_t$}
+
+\begin{intuitionbox}{The Key Insight}
+Both EKFs run on the same robot. They differ only in which sensors they fuse and what frame they operate in. Why are their process noise covariances different by $10\times$?
+
+\textbf{Answer:} EKF \#1 (odom) sees only continuous, high-rate sensors (wheel + IMU). Between sensor ticks, very little time passes ($\Delta t = 0.02$ s), so process noise per step is small.
+
+EKF \#2 (map) operates between GPS fixes (10 Hz $\to$ 0.1 s). During those 100 ms, the robot can drift significantly relative to the global frame. To prepare for the GPS update, $\bar{\Sigma}_t$ must grow large enough that $K_t$ is high when GPS arrives. Hence $R_t$ is set higher to inflate $\bar{\Sigma}$ faster.
+
+The math: between fixes,
+\[
+\bar{\Sigma}_t = \bar{\Sigma}_{t-1} + R\, \Delta t
+\]
+We want $\bar{\Sigma}_{xx}$ to be comparable to $Q_{xx}^{\text{GPS}} = 0.26$ when GPS arrives. With $\Delta t = 0.1$ and $R_{xx} = 0.5$: $\Sigma$ grows by 0.05 per cycle, reaches ~0.5 in 10 cycles --- well above GPS variance. Kalman gain is high; filter snaps to GPS.
+
+If $R_{xx}$ were 0.05 like EKF \#1, $\Sigma$ would only grow to 0.005 between fixes --- way below GPS variance. Kalman gain $\approx 0.005 / 0.265 \approx 2\%$. Filter would barely move toward GPS. Result: GPS rejected as outlier, map estimate drifts.
+\end{intuitionbox}
+
+% ============================================================
+\section{Tuning Workflow}
+% ============================================================
+
+\subsection{Initial Sanity Check}
+
+\begin{enumerate}
+\item All sensors publishing? (\texttt{ros2 topic hz})
+\item All TFs resolving? (\texttt{ros2 run tf2\_tools view\_frames})
+\item Each sensor's frame\_id correct in URDF?
+\item EKF receiving messages? (\texttt{/diagnostics})
+\end{enumerate}
+
+\subsection{Stationary Test}
+
+Robot should be still:
+\begin{itemize}
+\item Output velocity $\approx 0$
+\item Output position drifts $\approx 0$ over minutes
+\item Output yaw stable to $< 0.01$ rad/min
+\end{itemize}
+
+Failures:
+\begin{itemize}
+\item Velocity drifts $\to$ accelerometer bias not cancelled. Lower $R_{\dot{x}\dot{x}}$, increase $Q$ for accel.
+\item Yaw drifts fast $\to$ gyro bias too large. Use \texttt{imu\_filter\_madgwick} for orientation, increase its bias estimation gain.
+\end{itemize}
+
+\subsection{Straight-Line Test}
+
+Drive 10 m in straight line. Check:
+\begin{itemize}
+\item Output position matches (within sensor tolerance)
+\item No spurious yaw drift (filter shouldn't ``believe'' robot turned)
+\end{itemize}
+
+\subsection{Turn-in-Place Test}
+
+Spin 360$^\circ$ at 0.5 rad/s. Check:
+\begin{itemize}
+\item Output integrates to $\approx 0$ net displacement
+\item Yaw integrates to $\approx 2\pi$
+\end{itemize}
+
+Mismatch in yaw indicates baseline calibration error or gyro scale factor.
+
+\subsection{NIS Validation}
+
+Compute Normalised Innovation Squared per measurement:
+\[
+\mathrm{NIS}_t = \nu_t^\top S_t^{-1} \nu_t
+\]
+Should be $\chi^2_k$ distributed where $k$ is measurement dimension.
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Average NIS} & \textbf{Diagnosis} & \textbf{Fix} \\
+\midrule
+$\approx k$ & Well-tuned & --- \\
+$\gg k$ & Overconfident filter & Increase $R_t$ or $Q_t$ \\
+$\ll k$ & Underconfident filter & Decrease $R_t$ or $Q_t$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Common Failure Diagnoses}
+
+\begin{warnbox}{Filter Output Stuck}
+Symptom: filter ignores GPS, position frozen.
+
+Causes:
+\begin{enumerate}
+\item Initial covariance too small (\texttt{1e-9} for $x, y$ in EKF \#2) $\to$ Kalman gain near zero. Increase to 1.0+.
+\item Rejection threshold too tight $\to$ all GPS rejected. Increase to 5.0.
+\item GPS covariance in message too large $\to$ Kalman gain near zero. Override with smaller value.
+\end{enumerate}
+\end{warnbox}
+
+\begin{warnbox}{Filter Output Jumpy}
+Symptom: position bounces around.
+
+Causes:
+\begin{enumerate}
+\item Rejection threshold too loose $\to$ outliers accepted. Decrease.
+\item $R_t$ too high $\to$ filter chases every measurement. Decrease.
+\item Sensor noise underestimated in $Q_t$. Increase.
+\end{enumerate}
+\end{warnbox}
+
+\begin{warnbox}{Yaw Drifts}
+Symptom: heading slowly rotates over time.
+
+Causes:
+\begin{enumerate}
+\item Wheel baseline miscalibrated. Recalibrate.
+\item IMU yaw bit not enabled in \texttt{imuN\_config}. Enable.
+\item No magnetometer + long run $\to$ inevitable. Use loop closure or GPS heading.
+\end{enumerate}
+\end{warnbox}
+
+\begin{warnbox}{TF Errors}
+Symptom: ``Lookup would require extrapolation into future'' / ``into past''.
+
+Causes:
+\begin{enumerate}
+\item Clock skew. Sync system clocks.
+\item \texttt{transform\_time\_offset} set wrong. Try 0.05.
+\item Sensor timestamps in wrong unit. Check ros2 topic echo.
+\end{enumerate}
+\end{warnbox}
+
+% ============================================================
+\section{Quick Reference Tables}
+% ============================================================
+
+\subsection{All Parameters at a Glance}
+
+\begin{center}
+\footnotesize
+\begin{longtable}{p{4.0cm} p{2.0cm} p{2.0cm} p{6.0cm}}
+\toprule
+\textbf{Parameter} & \textbf{Type} & \textbf{Project value} & \textbf{Effect of increasing} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{l}{\itshape continued from previous page} \\
+\toprule
+\textbf{Parameter} & \textbf{Type} & \textbf{Project value} & \textbf{Effect of increasing} \\
+\midrule
+\endhead
+\multicolumn{4}{l}{\itshape continued on next page} \\
+\endfoot
+\bottomrule
+\endlastfoot
+\texttt{frequency} & Hz & 50.0 & smoother, more CPU \\
+\texttt{sensor\_timeout} & s & 0.1 & wait longer for laggy sensors \\
+\texttt{two\_d\_mode} & bool & true & lock z, roll, pitch \\
+\texttt{world\_frame} & string & odom/map & determines TF role \\
+\texttt{publish\_tf} & bool & true & node owns TF link \\
+\texttt{use\_control} & bool & true & use cmd\_vel for prediction \\
+\texttt{control\_timeout} & s & 0.2 & ignore stale commands \\
+\texttt{acceleration\_limits} & m/s² & [1.0, ..., 1.5] & allow sharper accel \\
+\texttt{acceleration\_gains} & [0,1] & [0.8, ..., 0.9] & trust commanded accel more \\
+\texttt{process\_noise\_covariance} ($R$) & 15$\times$15 & varies & faster filter, noisier \\
+\texttt{initial\_estimate\_covariance} ($\Sigma_0$) & 15$\times$15 & varies & first measurement dominates \\
+\texttt{odomN\_config} & 15 bool & varies & include more state dims \\
+\texttt{odomN\_differential} & bool & false & use deltas, not absolute \\
+\texttt{odomN\_relative} & bool & false & first msg = origin \\
+\texttt{odomN\_pose\_rejection\_threshold} & $d_M^2$ & 3.0 (GPS) & accept more outliers \\
+\texttt{imuN\_remove\_gravitational\_acceleration} & bool & true & subtract gravity \\
+\texttt{magnetic\_declination\_radians} & rad & 0.0 & rotate map frame \\
+\texttt{yaw\_offset} & rad & 0.0 & align IMU 0 with map +x \\
+\texttt{zero\_altitude} & bool & true & ignore GPS altitude \\
+\texttt{wait\_for\_datum} & bool & false & require explicit datum \\
+\texttt{delay} (navsat) & s & 3.0 & wait longer before locking transform \\
+\end{longtable}
+\end{center}
+
+\subsection{Project Configuration Summary --- Side-by-Side}
+
+\begin{center}
+\footnotesize
+\begin{tabular}{p{4.0cm} c c}
+\toprule
+\textbf{Parameter} & \textbf{EKF \#1 (odom)} & \textbf{EKF \#2 (map, post-debug)} \\
+\midrule
+\texttt{world\_frame} & odom & map \\
+\texttt{frequency} & 50 & 50 \\
+\texttt{two\_d\_mode} & true & true \\
+\texttt{use\_control} & true & false \\
+Wheel odom (config) & $v_x, \omega_z$ & $v_x, v_y, \omega_z$ \\
+IMU (config) & orient + $\omega$ + accel & $\omega$ only (no accel) \\
+\texttt{imu0\_differential} & false & false \\
+Visual odom & yes (pose, diff) & --- (removed) \\
+LiDAR odom & yes (pose+yaw, diff) & yes (yaw only, diff mode) \\
+GPS & --- & \textbf{yes (RTK, $R\!=\!10^{-4}$)} \\
+GPS rejection threshold & --- & 100 \\
+$R_{xx}$ & 0.05 & 0.05 \\
+$R_{\dot{x}\dot{x}}$ & 0.025 & 0.001 \\
+$R_{\psi\psi}$ & 0.06 (or 0.08) & 0.001 \\
+$R_{\dot{\psi}\dot{\psi}}$ & 0.04 & 0.001 \\
+$\Sigma_0^{xx}$ & \texttt{1e-9} & \texttt{1e-9} \\
+$\Sigma_0^{\psi\psi}$ & \texttt{1e-9} & \texttt{1e-9} \\
+\midrule
+Map x,y drift (stationary) & --- & $\le 3$~cm (RTK noise floor) \\
+Map yaw drift (stationary) & --- & $\le 0.1^\circ$ (locked) \\
+Global anchoring & --- & GPS (RTK) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Reading the table}: EKF~\#2 uses a leaner sensor set than EKF~\#1 (no VO, no IMU accel) plus tight velocity/yaw process noise. Three tweaks vs ``canonical'': (1) GPS rejection threshold 100$\sigma$ (RTK noise too low to produce realistic outliers), (2) tight $Q[\psi], Q[\dot{y}], Q[\dot{\psi}]$ (kinematic + cross-cov constraints), (3) navsat node consumes EKF~\#2 output (\emph{not} EKF~\#1) to break the circular reference loop documented in \texttt{ekf\_drift\_debug.pdf}.
+
+% ============================================================
+\section*{Closing Notes}
+\addcontentsline{toc}{section}{Closing Notes}
+% ============================================================
+
+Every parameter in \texttt{robot\_localization} corresponds to a specific term in the EKF equations. The \texttt{config} bits build the observation matrix $H_t$. The \texttt{covariance\_diagonal} overrides shape the measurement noise $Q_t$. The \texttt{process\_noise\_covariance} is the motion noise $R_t$. The \texttt{initial\_estimate\_covariance} is $\Sigma_0$. The \texttt{rejection\_threshold} parameters implement Mahalanobis gating $d_M^2 < \text{threshold}$. The \texttt{world\_frame} parameter determines whether the node plays the local or global role in the dual-EKF design.
+
+Tuning is not arbitrary --- each knob has a mathematical home. When the filter misbehaves, identify which equation governs the symptom, then adjust the parameter that controls that equation. The relative scale of $R$ to $Q$ determines steady-state Kalman gain; the relative scale of $\Sigma_0$ to $Q$ at startup determines initial trust in the first measurement.
+
+\textbf{Update (post-debug, 2026-05-09):} The earlier ``deliberate omission of GPS from EKF~\#2'' has been reversed. GPS is now fused in EKF~\#2 with the following preconditions met:
+\begin{itemize}[noitemsep]
+\item URDF GPS noise tightened to RTK grade ($\sigma\!\approx\!1$~cm horizontal). Relay covariance matched at $10^{-4}$~m$^2$.
+\item LiDAR yaw added in differential mode (\texttt{odom2\_config[5]=true}, \texttt{differential=true}). Provides the absolute yaw observation needed to suppress GPS-driven yaw coupling.
+\item Wheel $v_y\!=\!0$ enabled (\texttt{odom0\_config[7]=true}). Enforces non-holonomic constraint at the measurement level.
+\item IMU linear acceleration disabled in EKF~\#2. Wheel + GPS provide all needed velocity/position information; accel only injects bias.
+\item Process noise tightened: $Q[\psi]=Q[\dot{x}]=Q[\dot{y}]=Q[\dot{\psi}]=0.001$. Non-holonomic constraint + cross-covariance suppression.
+\item GPS rejection threshold raised to 100$\sigma$. RTK is too clean to produce realistic outliers; gating only blocks legitimate corrections.
+\item \texttt{navsat\_transform\_node} input remapped from EKF~\#1 (\texttt{/odometry/local}, odom frame) to EKF~\#2 (\texttt{/odometry/global}, map frame). Without this remap, GPS in odom frame gets re-transformed by EKF~\#2's own \texttt{map}$\to$\texttt{odom} TF, producing self-consistent garbage that never corrects state. See \texttt{report/ekf\_drift\_debug.pdf} for the 11-step case study.
+\end{itemize}
+
+Result: stationary hold at GPS within 1--3~cm, yaw locked within $0.1^\circ$. Original 3.56$°/$s yaw leak observation came from a config with loose $Q[\psi]$ and consumer-grade GPS noise; the same architectural pattern is stable once those underlying issues are fixed.
+
+Combine this document with \texttt{EKF\_Deep\_Dive\_Guide.pdf} (theory) for a complete picture: theory explains \emph{why} the equations look the way they do; this document explains \emph{which knob controls what}, grounded in the actual project YAML.
+
+\end{document}

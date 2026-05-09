@@ -47,7 +47,7 @@ def generate_launch_description():
         value=[resource_paths, ":", EnvironmentVariable("GZ_FILE_PATH", default_value="")],
     )
 
-    # World includes sensor plugins (IMU, NavSat, Sensors with ogre2)
+    # world start sensor plugin
     gz_sim = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim_pkg, "launch", "gz_sim.launch.py")
@@ -58,7 +58,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    # Publishes /robot_description and the TF tree from the URDF
+    # publish robot body
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -66,7 +66,7 @@ def generate_launch_description():
         parameters=[{"robot_description": robot_description, "use_sim_time": True}],
     )
 
-    # Bridge Gazebo's clock to ROS so use_sim_time works correctly
+    # send clock to ROS
     clock_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -98,7 +98,7 @@ def generate_launch_description():
         output="screen",
     )
 
-    # Spawn the robot into Gazebo using the /robot_description topic
+    # put robot in gazebo
     spawn_robot = Node(
         package="ros_gz_sim",
         executable="create",
@@ -111,7 +111,7 @@ def generate_launch_description():
         output="screen",
     )
 
-    # RViz integrated in the same launch, always on simulation time.
+    # start rviz
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -127,8 +127,7 @@ def generate_launch_description():
         parameters=[{"use_sim_time": True}],
     )
 
-    # Activate joint_state_broadcaster first, then the drive controller.
-    # The delay gives Gazebo time to fully load the gz_ros2_control plugin.
+    # start joint then drive. wait so gazebo can load.
     joint_state_broadcaster = TimerAction(
         period=15.0,
         actions=[

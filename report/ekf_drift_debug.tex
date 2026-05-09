@@ -1,0 +1,887 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\usepackage{titlesec}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\definecolor{good}{RGB}{0,128,0}
+\definecolor{bad}{RGB}{200,0,0}
+\definecolor{partial}{RGB}{200,140,0}
+\definecolor{codebg}{RGB}{245,245,245}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{black!30},
+  breaklines=true,
+  showstringspaces=false,
+  xleftmargin=4pt,
+  xrightmargin=4pt,
+  aboveskip=4pt,
+  belowskip=4pt,
+}
+
+\newcommand{\good}[1]{\textcolor{good}{\textbf{#1}}}
+\newcommand{\bad}[1]{\textcolor{bad}{\textbf{#1}}}
+\newcommand{\partialw}[1]{\textcolor{partial}{\textbf{#1}}}
+
+\title{\textbf{EKF~\#2 Stationary-Drift Debug Journey}\\
+\large Multi-Sensor Fusion Pipeline --- Husarion Lynx (Gazebo Harmonic)}
+\author{Anish Kumar, Sachit Bansal, Somanshu Juneja\\
+Under guidance of Dr.~Radhe Shyam}
+\date{2026-05-09}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document records every fix attempted on the global EKF (\texttt{ekf\_filter\_node\_map})
+during the resolution of a stationary-drift bug. The robot, while not moving, was reported by
+EKF~\#2 at positions up to 21~m away from ground truth. Fifteen separate hypotheses were tested.
+The final root cause was a \textbf{circular reference loop}: \texttt{navsat\_transform} was
+fed by EKF~\#1 (odom frame), so its \texttt{/odometry/gps} output lived in the odom frame.
+EKF~\#2 then transformed those measurements through the \texttt{map$\to$odom} TF that EKF~\#2
+itself publishes from its own state, producing self-consistent garbage that never corrected the
+state. Switching navsat's input to EKF~\#2's output broke the loop and the system locked to RTK
+ground truth within 1--3~cm.
+\end{abstract}
+
+\section{Problem Statement}
+
+Robot stationary at world origin in Gazebo (ground truth: $x=y=0$). Topics inspected:
+\begin{itemize}[noitemsep]
+\item \texttt{/odometry/local} (EKF~\#1, odom frame, no GPS): drift $\le 5$~mm \good{$\checkmark$}
+\item \texttt{/odometry/global} (EKF~\#2, map frame, with GPS): drift up to \bad{21~m} in 100~s
+\item \texttt{/odometry/gps} (navsat output): drift $\le 2$~cm \good{$\checkmark$}
+\item Raw GPS \texttt{/gps/fix}: drift $\le 2.3$~cm \good{$\checkmark$}
+\end{itemize}
+
+\noindent
+All upstream sensors clean. Bug isolated to EKF~\#2 fusion math.
+
+\section{Diagnostic Infrastructure}
+
+A Jupyter notebook \texttt{notebooks/pipeline\_drift\_debug.ipynb} was built to extract every
+pipeline stage from a stationary rosbag and quantify per-stage drift. Eleven sections:
+\begin{enumerate}[noitemsep]
+\item Topic rates / sample counts
+\item Raw \texttt{/gps/fix} scatter (Gazebo NavSat plugin direct output)
+\item \texttt{/gps/fix/covariance\_fixed} relay pass-through verification
+\item \texttt{/odometry/gps} navsat-projected scatter
+\item Visual + LiDAR odometry stationary noise per-frame deltas
+\item EKF~\#1 stationary drift
+\item EKF~\#2 stationary drift
+\item Pipeline overlay (XY, X(t), Y(t), yaw(t)) on one figure
+\item IMU bias check (gyro Z $\to$ yaw drift, accel X/Y $\to$ position drift via $\frac{1}{2}b\,t^2$)
+\item EKF~\#2 GPS innovation analysis
+\item Per-stage drift attribution table + auto-flag heuristics
+\end{enumerate}
+
+\noindent
+Companion script \texttt{record\_stationary\_pipeline.sh} captures all topics needed for
+the analysis with one bag command.
+
+\section{Fix Attempts --- Chronological}
+
+Each row: hypothesis $\to$ change $\to$ result. Status legend:
+\good{$\checkmark$}=fixed it, \partialw{$\sim$}=helped partially, \bad{$\times$}=no improvement or made worse.
+
+\subsection{Fix 1: URDF GPS noise too high (consumer-grade)}
+\textbf{Hypothesis:} Gazebo NavSat scatter $\sigma\!\approx\!0.5$~m too noisy for 10~Hz fusion.\\
+\textbf{Change:} URDF \texttt{stddev}: $4.5\!\times\!10^{-6}$ deg $\to$ $9\!\times\!10^{-8}$ deg ($\sim\!1$~cm RTK).\\
+\textbf{Status:} \good{$\checkmark$} Raw GPS scatter dropped to 1~cm. Relay variance updated to match
+($1\!\times\!10^{-4}$~m$^2$). Necessary baseline but did not fix EKF~\#2 drift.
+
+\subsection{Fix 2: IMU accelerometer bias mean = 0.1}
+\textbf{Hypothesis:} Notebook measured accel X/Y bias $\approx\!+0.08$~m/s$^2$.
+URDF check revealed \texttt{<bias\_mean>0.1</bias\_mean>} on all three accel axes.\\
+\textbf{Change:} \texttt{bias\_mean}: $0.1 \to 0.0$, \texttt{bias\_stddev}: $0.001 \to 0.0001$.\\
+\textbf{Math:} Predicted drift $\Delta x = \tfrac{1}{2} \cdot 0.1 \cdot 158^2 \approx 1248$~m
+without correction; in EKF integration manifested as \emph{velocity} drift via accel double-integration.\\
+\textbf{Status:} \good{$\checkmark$} IMU accel bias dropped from $+0.08$ to $+0.001$~m/s$^2$.
+
+\subsection{Fix 3: navsat frequency 1~Hz $\to$ 10~Hz}
+\textbf{Hypothesis:} Match GPS sensor rate so EKF~\#2 sees full RTK update cadence.\\
+\textbf{Status:} \good{$\checkmark$} Necessary; works with RTK noise (would have caused jitter at $\sigma\!=\!0.5$~m).
+
+\subsection{Fix 4: Tighten EKF~\#2 process noise on $v_y$}
+\textbf{Hypothesis:} Diff-drive non-holonomic: $v_y \equiv 0$. Loose $Q[v_y]\!=\!0.05$ lets state walk.\\
+\textbf{Change:} $Q[v_x] = Q[v_y]: 0.05 \to 0.001$.\\
+\textbf{Status:} \partialw{$\sim$} Position drift dropped 15~m $\to$ 7~m, but yaw drift WORSENED $-0.75^\circ \to -15.8^\circ$.
+Error pumping: locked $v_y$ pushed mismatch into yaw via $P[v_y, \theta]$ cross-covariance.
+
+\subsection{Fix 5: Disable IMU linear acceleration in EKF~\#2}
+\textbf{Hypothesis:} Even with \texttt{bias\_mean}$=0$, residual accel noise integrates to velocity.
+Wheel and GPS already constrain velocity.\\
+\textbf{Change:} \texttt{imu0\_config[12..14]}: \texttt{true,true,true} $\to$ \texttt{false,false,false}.\\
+\textbf{Status:} \partialw{$\sim$} Drift 7~m $\to$ 4.5~m. Accel was indeed double-integrating residual bias.
+
+\subsection{Fix 6: Switch VO/LO from position-fusion to velocity-fusion}
+\textbf{Hypothesis:} VO/LO in \texttt{differential=true} mode summed thousand position deltas
+$\to$ random walk drift accumulates. Velocity fusion lets EKF integrate cleanly.\\
+\textbf{Change:} \texttt{odom1/odom2\_config}: position rows OFF, velocity rows ON; \texttt{differential=false}.\\
+\textbf{Status:} \bad{$\times$} Worse: yaw $-22.7^\circ$, drift 5.21~m. Visual odom publishes velocity with
+\emph{artificially tight covariance} (cov $= 3.4\!\times\!10^{-6}$, $\sigma\!\approx\!2$~mm/s) so the filter
+overweights its biased $v_x$ reading by a factor of $\sim\!300$ over wheel.
+
+\subsection{Fix 7: Tighten yaw and $v_{\mathrm{yaw}}$ process noise}
+\textbf{Hypothesis:} Loose $Q[\theta]\!=\!0.06, Q[\omega_z]\!=\!0.02$ let GPS x,y updates drag yaw via cross-covariance.\\
+\textbf{Change:} Both $\to 0.001$.\\
+\textbf{Status:} \good{$\checkmark$} for yaw (locked at $\sim\!\!0.1^\circ$); did not fix position.
+
+\subsection{Fix 8: Set \texttt{imu0\_differential=false} in EKF~\#2}
+\textbf{Status:} No-op (orientation rows were already false). Cleanup only.
+
+\subsection{Fix 9: Drop VO/LO entirely from EKF~\#2}
+\textbf{Hypothesis:} Their tight twist covariance is unfixable; lean fusion is more robust.\\
+\textbf{Change:} EKF~\#2 = wheel + IMU + GPS only.\\
+\textbf{Status:} \bad{$\times$} Yaw walked $-238^\circ$ in 58~s. Removing LiDAR removed the only absolute
+yaw anchor; gyro Z bias integrated unchecked.
+
+\subsection{Fix 10: Increase $Q[x,y]$ to 0.5}
+\textbf{Hypothesis:} Tight $Q[x,y]=0.025$ keeps $P_{xx}$ small; once state diverges, GPS gate (3$\sigma$
+of $\sqrt{P+R}$) rejects updates.\\
+\textbf{Change:} $Q[x,y]: 0.025 \to 0.5$.\\
+\textbf{Status:} \bad{$\times$} Made initial transient worse: P explodes during 18~s navsat startup gap, state runs.
+
+\subsection{Fix 11: Compromise --- $Q[x,y] = 0.05$}
+\textbf{Status:} Acceptable steady-state but not the cure.
+
+\subsection{Fix 12: GPS rejection threshold 3.0 $\to$ 100}
+\textbf{Hypothesis:} With RTK $\sigma=1$~cm, no realistic outliers possible; trust always.\\
+\textbf{Status:} \good{$\checkmark$} Necessary; without it the diverged state self-locks because GPS gets rejected.
+
+\subsection{Fix 13: Enable wheel $v_y$ measurement (\texttt{odom0\_config[7]=true})}
+\textbf{Hypothesis:} Inspecting EKF~\#2 internal state via \texttt{rostopic echo} revealed
+\bad{$v_y = +7.33$~m/s} while body twist read near zero in output --- $v_y$ state had no measurement source
+(wheel didn't report it, IMU accel disabled, GPS no velocity).\\
+\textbf{Change:} \texttt{odom0\_config[7]: false $\to$ true}. \texttt{diff\_drive\_controller} publishes
+$v_y\!=\!0$ with cov $0.001$ as a kinematic constraint.\\
+\textbf{Status:} \good{$\checkmark$} $v_y$ state locked. Predicted Y-runaway eliminated.
+Drift dropped to $\sim\!\!3$~m steady-state offset (still wrong, but no longer growing).
+
+\subsection{Fix 14: LiDAR yaw absolute in differential mode}
+\textbf{Hypothesis:} EKF~\#2 has no absolute yaw measurement; only velocity sources for yaw rate.
+Even with tight $Q[v_{\mathrm{yaw}}]$, integrated yaw drifts at $0.16^\circ$/s.\\
+\textbf{Change:} Add \texttt{odom2: /odometry/lidar} with \emph{only} yaw row 5 enabled and
+\texttt{differential=true} (uses ICP $\Delta\theta$ between samples, immune to absolute offset).\\
+\textbf{Status:} \good{$\checkmark$} Yaw locked at $\le\!0.1^\circ$ steady. But position still 2.7~m off.
+
+\subsection{Fix 15: Circular Reference Loop --- the actual root cause}
+
+After fixes 1--14, EKF~\#2 had:
+\begin{itemize}[noitemsep]
+\item velocity locked at $\le\!10^{-5}$~m/s (verified via internal state inspection)
+\item yaw locked at $\le\!0.1^\circ$
+\item TF map$\to$odom showing $(-21.3, -1.4)$~m
+\item GPS reporting $(0, 0)$ in odom frame
+\item EKF~\#2 not snapping to GPS despite all gates accepting it
+\end{itemize}
+
+\noindent
+The only remaining explanation: \textbf{GPS measurements were not actually correcting state}.
+
+\section{The Circular Reference Bug}
+
+\subsection{Topology Before Fix}
+
+\begin{tcolorbox}[colback=red!5,colframe=red!50,title=Broken topology]
+\small
+\begin{verbatim}
+EKF#1 (world_frame=odom)  ───►  navsat_transform
+                                        │
+                                        ▼
+                              /odometry/gps  (frame_id="odom")
+                                        │
+                                        ▼
+                                     EKF#2  (world_frame=map)
+                                        │   uses TF map→odom to transform
+                                        │   ┌─────────────────────┐
+                                        │   ▼                     │
+                                        ├──► tf2 buffer            │
+                                        │                          │
+                                        └──► publishes map→odom ───┘
+                                              based on its own state
+\end{verbatim}
+\end{tcolorbox}
+
+\noindent
+Each step in the chain:
+\begin{enumerate}[noitemsep]
+\item navsat reads EKF~\#1's continuous odometry (\texttt{/odometry/local}, frame=\texttt{odom}).
+\item navsat converts incoming GPS lat/lon $\to$ XY using EKF~\#1's yaw and the locked datum.
+      Output \texttt{/odometry/gps} carries \texttt{frame\_id=odom}, since navsat copies its
+      input odometry's frame.
+\item EKF~\#2 reads \texttt{/odometry/gps}. Its world frame is \texttt{map}. To use a measurement
+      tagged \texttt{odom}, it queries TF for \texttt{map$\to$odom}.
+\item EKF~\#2 \emph{itself} publishes the \texttt{map$\to$odom} transform every cycle, computed as
+      \texttt{(EKF\#2\_state\_in\_map) $-$ (EKF\#1\_state\_in\_odom)}.
+\end{enumerate}
+
+\subsection{Why It Self-Consistently Fails}
+
+For a stationary robot:
+\begin{align*}
+T_{\text{map}\to\text{odom}}(t)
+  &= P_{\text{EKF\#2}}(t) - P_{\text{EKF\#1}}(t) \\
+  &\approx P_{\text{EKF\#2}}(t) \quad \text{(since EKF\#1 holds 0)} \\[4pt]
+\text{GPS\_in\_odom} &\approx 0 \quad \text{(robot at datum, stationary)} \\[4pt]
+\text{GPS\_in\_map}  &= T_{\text{map}\to\text{odom}} \cdot \text{GPS\_in\_odom}
+                      = P_{\text{EKF\#2}}(t)
+\end{align*}
+
+\noindent
+The GPS measurement, after frame transformation, \emph{equals the EKF's own state}. The
+innovation $\nu = z - H\hat{x}$ is identically zero. \textbf{No correction is ever applied.}
+Once the state has drifted (e.g.\ from prior bugs in fixes 1--14), GPS cannot pull it back
+because GPS itself gets rotated/translated to wherever the EKF thinks it is.
+
+\subsection{Confirmation via TF Inspection}
+
+\begin{lstlisting}
+$ ros2 run tf2_ros tf2_echo map odom
+- Translation: [-21.306, -1.416, 0.000]  # EKF#2 thinks robot is here
+- Rotation:    [0.000, 0.000, 0.014, 1.000]
+\end{lstlisting}
+
+\noindent
+EKF~\#2 wandered 21.3~m in map frame. \texttt{/odometry/gps} showed
+$(-0.013, +0.002)$ in \texttt{frame\_id=odom}. Transformed through $T_{\text{map}\to\text{odom}}$
+that EKF~\#2 publishes itself, the GPS measurement landed at $(-21.32, -1.41)$ in map ---
+\emph{exactly where EKF~\#2 already believed it was}. Self-consistent garbage.
+
+\subsection{The Fix --- Linear Topology}
+
+Change navsat's input from EKF~\#1 to EKF~\#2:
+
+\begin{lstlisting}[language={}]
+# baseline_ekf.launch.py
+remappings=[
+    ("imu",               "imu/data/covariance_fixed"),
+    ("gps/fix",           "gps/fix/covariance_fixed"),
+-   ("odometry/filtered", "odometry/local"),
++   ("odometry/filtered", "odometry/global"),
+],
+\end{lstlisting}
+
+\begin{tcolorbox}[colback=green!5,colframe=green!50!black,title=Fixed topology]
+\small
+\begin{verbatim}
+GPS lat/lon ─► navsat (uses EKF#2 yaw, locked datum) ─► /odometry/gps
+                                                       (frame_id="map")
+                                                          │
+                                                          ▼
+                                                       EKF#2  (world_frame=map)
+                                                       direct fusion, no TF
+                                                       transformation needed
+\end{verbatim}
+\end{tcolorbox}
+
+\noindent
+Now navsat copies EKF~\#2's frame (map) into its output. EKF~\#2 reads the message in its
+own world frame --- no TF lookup, no circular dependency. The innovation is genuine
+$\nu = z_{\text{GPS,map}} - \hat{x}_{\text{EKF\#2}}$, the Kalman gain pulls state to GPS,
+the system locks to ground truth.
+
+\subsection{Concern: Feedback Loop?}
+
+The original launch comment warned: \emph{``map to local! not global. global make loop and
+robot go crazy.''} That warning held when EKF~\#2 was nonlinear in inputs (visual + LiDAR
+position deltas, accel integration, loose process noise). With the lean post-fix EKF~\#2
+(wheel + IMU $\omega_z$ + LiDAR $\Delta\theta$ + GPS x,y, all velocities tightly constrained),
+the EKF~\#2$\to$navsat$\to$EKF~\#2 path is stable: GPS pulls state to truth, navsat
+re-projects GPS using truth-aligned yaw, no oscillation observed.
+
+\section{Final Working Configuration}
+
+\subsection{EKF~\#2 Sensor Matrix}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Sensor} & \textbf{Topic} & \textbf{Fused channels} \\
+\midrule
+Wheel encoder & \texttt{/diff\_drive\_controller/odom} & $v_x,\ v_y,\ \omega_z$ \\
+LiDAR (ICP)   & \texttt{/odometry/lidar}                 & yaw (differential mode, $\Delta\theta$) \\
+IMU           & \texttt{/imu/data/covariance\_fixed}     & $\omega_x,\ \omega_y,\ \omega_z$ \\
+GPS (RTK)     & \texttt{/odometry/gps} (in map frame)    & $x,\ y$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Process Noise Diagonal}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+State & $Q$ value & Notes \\
+\midrule
+$x, y$       & 0.05    & Moderate, GPS-corrected fast \\
+$\theta$ (yaw) & 0.001 & Tight; LiDAR $\Delta\theta$ anchors \\
+$v_x, v_y$   & 0.001   & Tight; non-holonomic + wheel constraint \\
+$\omega_z$   & 0.001   & Tight; wheel + IMU velocity \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Sensor Noise Sources}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Layer & Param & Value \\
+\midrule
+URDF GPS horiz stddev & --- & $9\!\times\!10^{-8}$ deg ($\sim\!1$~cm) \\
+URDF GPS vert stddev  & --- & $2.7\!\times\!10^{-7}$ deg ($\sim\!3$~cm) \\
+URDF accel bias\_mean & all axes & 0.0 \\
+URDF accel bias\_stddev & all axes & 0.0001 \\
+URDF gyro bias\_stddev  & all axes & 0.0001 \\
+Relay GPS\_VAR\_HORIZONTAL & --- & $1\!\times\!10^{-4}$ m$^2$ \\
+EKF~\#2 GPS rejection threshold & --- & 100 \\
+navsat frequency & --- & 10~Hz \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Verification --- Stationary Hold}
+
+10-second sample of \texttt{/odometry/global} after all fixes:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+$t$ (s) & $x$ (m) & $y$ (m) & yaw (deg) \\
+\midrule
+1  & $-0.0027$ & $+0.0140$ & $-0.105$ \\
+3  & $-0.0023$ & $+0.0165$ & $-0.093$ \\
+5  & $+0.0067$ & $+0.0103$ & $-0.105$ \\
+7  & $-0.0008$ & $+0.0034$ & $-0.098$ \\
+9  & $-0.0027$ & $-0.0144$ & $-0.102$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+\good{Position scatter $\sim\!\!1$~cm in X, $\sim\!\!3$~cm in Y --- matches RTK noise floor.
+Yaw locked within $0.01^\circ$.}\\
+
+\noindent
+TF \texttt{map$\to$odom}: $(-0.020, 0.018)$~m --- both frames coincident as expected for
+a robot at the datum.
+
+\section{Case Study --- How the Circular Reference Was Found}
+
+This section reconstructs the live debugging session that exposed Fix~15. After fixes 1--14
+the system still drifted by several meters. Each step below shows the exact terminal
+output that drove the next hypothesis.
+
+\subsection{Step 1 --- Quick health check after Fix 14}
+
+\begin{lstlisting}[language=bash]
+$ for t in /odometry/global /odometry/local /odometry/gps /ground_truth/odom; do
+    echo "=== $t ==="
+    ros2 topic echo $t --once | grep -A 2 "position:" | head -4
+  done
+\end{lstlisting}
+
+\begin{lstlisting}
+=== /odometry/global ===
+    position: x: -2.7306    y: 0.8205
+=== /odometry/local ===
+    position: x: 0.006      y: 0.0002
+=== /odometry/gps ===
+    position: x: -0.014     y: 0.017
+=== /ground_truth/odom ===
+    position: x: -8.6e-10   y: 9.1e-12
+\end{lstlisting}
+
+\noindent
+\textbf{Read:} EKF~\#1, GPS, ground truth all agree (within 2~cm). EKF~\#2 alone reports
+$(-2.73, +0.82)$~m. Drift confined to EKF~\#2.
+
+\subsection{Step 2 --- Is EKF~\#2 yaw walking?}
+
+\begin{lstlisting}[language=bash]
+$ ros2 topic echo /odometry/global --once | grep -A 4 orientation
+\end{lstlisting}
+
+\begin{lstlisting}
+orientation:
+  z: -0.0005
+  w: 0.99999987
+\end{lstlisting}
+
+\noindent
+$\theta = 2 \arcsin(0.0005) \approx -0.06^\circ$. \textbf{Yaw locked.} (Fix~14 with LiDAR
+$\Delta\theta$ working.)
+
+\subsection{Step 3 --- Is internal velocity walking?}
+
+\begin{lstlisting}[language=bash]
+$ ros2 topic echo /odometry/global --once | grep -A 8 twist
+\end{lstlisting}
+
+\begin{lstlisting}
+twist:
+  twist:
+    linear:
+      x: -1.93e-06
+      y:  1.48e-05
+    angular:
+      z: -2.13e-04
+\end{lstlisting}
+
+\noindent
+\textbf{Velocity locked at machine zero.} $v_x \approx 10^{-6}$~m/s, $v_y \approx 10^{-5}$~m/s.
+
+\subsection{Step 4 --- The contradiction}
+
+EKF~\#2 reports velocity = 0 but position drifting ($-2.73$~m on X, $+0.82$~m on Y, growing
+over time). \textbf{Mathematically impossible} under standard 2D rigid-body kinematics:
+\[
+\dot{x} = v_x \cos\theta - v_y \sin\theta
+\]
+With $v_x \approx v_y \approx 0$ and $\theta \approx 0$, $\dot{x}$ should also be zero.
+
+\noindent
+\textbf{Hypothesis:} The position EKF~\#2 reports must be coming from somewhere other than
+its own velocity-integration prediction. Either the state has been initialized wrong, or
+GPS is being applied incorrectly.
+
+\subsection{Step 5 --- Confirm GPS arriving and being processed}
+
+\begin{lstlisting}[language=bash]
+$ timeout 8 ros2 topic hz /odometry/gps
+average rate: 7.083  min: 0.099s  max: 0.200s
+
+$ ros2 topic echo /odometry/gps --once | head -15
+\end{lstlisting}
+
+\begin{lstlisting}
+header:
+  stamp: { sec: 150, nanosec: 900000000 }
+  frame_id: odom              <-- !!
+child_frame_id: ''
+pose:
+  pose:
+    position: { x: -0.005, y: 0.002 }
+\end{lstlisting}
+
+\noindent
+GPS publishing at 7~Hz, position $\approx 0$. \textbf{But \texttt{frame\_id = odom}, not
+\texttt{map}.} First red flag.
+
+\subsection{Step 6 --- Are gates accepting GPS?}
+
+\begin{lstlisting}[language=bash]
+$ ros2 param get /ekf_filter_node_map odom1_pose_rejection_threshold
+Double value is: 100.0
+\end{lstlisting}
+
+\noindent
+Threshold 100$\sigma$. With $P_{xx}=0.004$, $\sigma=0.064$~m. Gap from state ($-2.73$) to GPS
+($\approx\!0$) is 42$\sigma$ --- well within gate. GPS \emph{is} being accepted.
+
+\subsection{Step 7 --- Then why does state not snap to GPS?}
+
+Standard Kalman update: $K = P / (P+R)$. With $P=0.004$ and $R=10^{-4}$, $K = 0.975$. Each
+GPS update should pull state by 97.5\% toward GPS. After 5 updates ($<\!1$~s), state
+should be at GPS. But state stays at $-2.73$~m.
+
+\noindent
+\textbf{Hypothesis:} The Kalman gain math IS being applied, but the GPS measurement that
+EKF~\#2 sees is \emph{not actually $(-0.005, 0.002)$}. Something is transforming it.
+
+\subsection{Step 8 --- Inspect TF tree (the breakthrough)}
+
+\begin{lstlisting}[language=bash]
+$ ros2 run tf2_ros tf2_echo map odom
+\end{lstlisting}
+
+\begin{lstlisting}
+At time 175.730000000
+- Translation: [-21.306, -1.416, 0.000]
+- Rotation:    [0.000, 0.000, 0.007, 1.000]
+- RPY (deg):   [0.000, -0.000, 0.798]
+\end{lstlisting}
+
+\begin{lstlisting}[language=bash]
+$ ros2 run tf2_ros tf2_echo odom base_link
+\end{lstlisting}
+
+\begin{lstlisting}
+At time 177.385000000
+- Translation: [0.011, -0.002, 0.000]
+- Rotation:    [0.000, 0.000, -0.011, 1.000]
+\end{lstlisting}
+
+\noindent
+\textbf{The smoking gun.}
+\begin{itemize}[noitemsep]
+\item \texttt{odom$\to$base\_link} = $(0.01, 0)$~m \good{$\checkmark$} (EKF~\#1 says robot at origin in odom frame)
+\item \texttt{map$\to$odom} = $(-21.3, -1.4)$~m \bad{$\times$} (EKF~\#2 says odom is shifted 21m relative to map)
+\end{itemize}
+
+\noindent
+EKF~\#2 has been silently publishing a giant offset transform between map and odom.
+\texttt{map$\to$base\_link} composes to $(-21.3, -1.4)$~m --- exactly the EKF~\#2 internal state.
+
+\subsection{Step 9 --- The math of the loop}
+
+navsat reads EKF~\#1 (\texttt{frame=odom}). Its output \texttt{/odometry/gps} carries
+\texttt{frame\_id=odom} too (navsat copies input frame). When EKF~\#2 ingests this
+measurement, it must transform from odom into its own world frame (map):
+\[
+z_{\text{map}} = T_{\text{map}\to\text{odom}} \cdot z_{\text{odom}}
+\]
+But $T_{\text{map}\to\text{odom}}$ is published \emph{by EKF~\#2 itself}, computed as
+\[
+T_{\text{map}\to\text{odom}}(t) = \hat{x}_{\text{EKF\#2}}(t) - \hat{x}_{\text{EKF\#1}}(t)
+\]
+With EKF~\#1 holding origin, $T_{\text{map}\to\text{odom}} = \hat{x}_{\text{EKF\#2}}$.
+And GPS in odom $\approx 0$. Substituting:
+\[
+z_{\text{map}} = \hat{x}_{\text{EKF\#2}} \cdot 0 + \hat{x}_{\text{EKF\#2}} = \hat{x}_{\text{EKF\#2}}
+\]
+\textbf{The transformed GPS measurement equals EKF~\#2's own state estimate.} Innovation
+$\nu = z - H\hat{x} = 0$ identically. Kalman gain is irrelevant; with zero innovation,
+no correction is ever applied regardless of $K$.
+
+\subsection{Step 10 --- Verify with numbers}
+
+\begin{lstlisting}
+GPS in odom frame:      ( -0.005,  0.002)
+T_map->odom (EKF#2):    (-21.306, -1.416)
+
+GPS transformed to map: (-21.306 + (-0.005)*cos(0.8°),
+                         -1.416  + ( 0.002)*cos(0.8°))
+                      ≈ (-21.311, -1.414)
+
+EKF#2 internal state:   (-21.306, -1.416)   <-- same!
+
+Innovation in map:      ( -0.005,  0.002)   <-- pre-transform residual
+
+Kalman gain in map:     K ≈ 0.975
+Correction applied:     0.975 * 0.005 ≈ 5 mm
+
+Drift accumulated by EKF prediction since last update: easily > 5 mm
+\end{lstlisting}
+
+\noindent
+GPS ``correction'' shrinks to a few mm in map frame --- never enough to overcome the
+drift caused by tiny biases in wheel/IMU between updates. State runs away while the filter
+remains internally consistent.
+
+\subsection{Step 11 --- The fix and the proof}
+
+Change navsat's input from EKF~\#1 to EKF~\#2:
+
+\begin{lstlisting}[language=bash]
+# baseline_ekf.launch.py, navsat node remappings:
+- ("odometry/filtered", "odometry/local"),
++ ("odometry/filtered", "odometry/global"),
+\end{lstlisting}
+
+\noindent
+Now navsat output \texttt{/odometry/gps} carries \texttt{frame\_id=map}. EKF~\#2 reads
+the message in its own world frame, no TF transformation, the innovation is genuine:
+$\nu = z_{\text{GPS,map}} - \hat{x}_{\text{EKF\#2}}$.
+
+\noindent
+After restart:
+
+\begin{lstlisting}[language=bash]
+$ ros2 run tf2_ros tf2_echo map odom
+- Translation: [-0.020, 0.018, 0.000]      <-- 21m drop to 2cm
+
+$ ros2 topic echo /odometry/global --once | grep -A 2 position
+    position: x: -0.0028   y: 0.0140       <-- locked to ground truth
+\end{lstlisting}
+
+\noindent
+21~m of drift dissolves into 2~cm RTK noise. The bug was not in the filter, the noise model,
+the process covariance, the rejection thresholds, the sensor selection, the kinematic
+constraints, or the state vector. It was in \emph{which transform was being looked up} ---
+and that transform was being computed by the very node that needed it.
+
+\subsection{Why It Took 14 Other Fixes To Find}
+
+\begin{itemize}[noitemsep]
+\item Most fixes were \emph{still necessary}. Without IMU bias zero, vy locking,
+yaw process noise tightening, and a yaw anchor, state would have drifted independently
+of the circular reference. Even after Fix~15, omitting any earlier fix re-introduces
+the corresponding failure mode.
+\item The circular reference is invisible in any single topic --- both \texttt{/odometry/gps}
+and \texttt{/odometry/global} look reasonable in isolation. Only \texttt{tf2\_echo} on
+\texttt{map$\to$odom} reveals the offset.
+\item The original launch comment (\textit{``map to local! not global. global make loop and
+robot go crazy''}) actively discouraged the correct topology because it had been tried
+when EKF~\#2 was nonlinear with VO/LO position fusion --- back then the feedback was
+unstable.
+\item Innovation analysis (notebook section 9) reported RMSE around 1--5~m, but did not
+flag the loop because the analysis used the \emph{published} GPS in odom frame, not the
+post-transform GPS in map frame that EKF~\#2 actually saw.
+\end{itemize}
+
+\section{Lessons Learned}
+
+\begin{enumerate}
+\item \textbf{Live state inspection beats static analysis.} Multiple iterations chased
+process-noise tuning and rejection thresholds. The actual bug only surfaced via direct
+\texttt{rostopic echo /odometry/global} which revealed a hidden internal $v_y\!=\!7.33$~m/s, and
+then a \texttt{tf2\_echo map odom} which exposed the 21.3~m mismatch invisible from any single
+topic alone.
+
+\item \textbf{Source-of-truth coverage matters.} EKF~\#2 originally had no absolute yaw measurement
+and no $v_y$ measurement. Both gaps caused state runaway. Adding LiDAR $\Delta\theta$ fixed yaw,
+enabling wheel $v_y\!=\!0$ fusion fixed lateral velocity.
+
+\item \textbf{Reported covariances lie.} RTAB-Map visual odometry publishes velocity covariance
+$3\!\times\!10^{-6}$ ($\sigma\!\approx\!2$~mm/s), while measured stationary noise is $\sigma\!\approx\!15$~mm/s.
+A $50\!\times$ over-confident covariance dominates the Kalman fusion. Fix at source (relay) or drop the
+sensor.
+
+\item \textbf{Frame topology is part of the algorithm.} The EKF math was correct throughout fixes 1--14.
+The bug was in how three nodes (navsat, EKF~\#1, EKF~\#2) referenced each other through TF.
+Decoupling the loop required no math change, only an input remapping.
+
+\item \textbf{Diff-drive non-holonomic constraint is not free.}
+robot\_localization does not encode it; the user must explicitly fuse $v_y\!=\!0$ from the
+wheel odometry (which already publishes it) by enabling \texttt{odom0\_config[7]}.
+\end{enumerate}
+
+\section{Diagnostic Commands --- What We Ran, What It Gave Us}
+
+This section records the actual ROS~2 / shell commands used during the 15-fix journey,
+grouped by what insight each produced. These are the exact commands that exposed each
+bug; the entire debug chain is reproducible by replaying them.
+
+\subsection{Topic-level state inspection}
+
+\begin{lstlisting}[language=bash]
+# Compare every pipeline stage at one instant
+for t in /odometry/global /odometry/local /odometry/gps /ground_truth/odom; do
+  echo "=== $t ==="
+  timeout 2 ros2 topic echo $t --once 2>/dev/null | grep -A 2 "position:" | head -4
+done
+\end{lstlisting}
+\noindent\textbf{What it gave:} Side-by-side x/y at each stage. Showed EKF~\#1 at $\sim\!0$,
+GPS at $\sim\!0$, EKF~\#2 at $-21$~m --- isolated the bug to EKF~\#2 fusion (not sensors).
+
+\begin{lstlisting}[language=bash]
+# Sample EKF#2 over time to confirm active drift vs frozen offset
+for i in 1 2 3 4 5; do
+  POS=$(timeout 2 ros2 topic echo /odometry/global --once 2>/dev/null | \
+        python3 -c "import sys,re; t=sys.stdin.read(); \
+                    x=re.search(r'x: (-?[0-9.e-]+)',t); \
+                    y=re.search(r'y: (-?[0-9.e-]+)',t); \
+                    print(f'{x.group(1)} {y.group(1)}')")
+  echo "t=$i: $POS"; sleep 2
+done
+\end{lstlisting}
+\noindent\textbf{What it gave:} Y went 38\,$\to$\,42\,$\to$\,56~m over 8~s while body twist
+read $\sim\!0$. Logical contradiction triggered the deeper investigation.
+
+\subsection{Internal EKF state (twist field reveals hidden velocity)}
+
+\begin{lstlisting}[language=bash]
+# Full odometry message including twist (body-frame velocity in EKF state)
+ros2 topic echo /odometry/global --once
+\end{lstlisting}
+\noindent\textbf{What it gave:} The decisive output ---
+\texttt{twist.linear.y = +7.33 m/s} on a stationary robot. Proved $v_y$ state was
+unconstrained; led directly to Fix 13 (enable wheel $v_y$ row).
+
+\subsection{Per-sensor message + covariance audit}
+
+\begin{lstlisting}[language=bash]
+ros2 topic echo /diff_drive_controller/odom --once
+ros2 topic echo /odometry/visual --once
+ros2 topic echo /odometry/lidar  --once
+ros2 topic echo /imu/data/covariance_fixed --once
+\end{lstlisting}
+\noindent\textbf{What it gave:} Visual odom \texttt{twist.linear.x = -0.006~m/s} with
+\texttt{covariance[0] = 3.4e-6} ($\sigma\!\approx\!2$~mm/s). Compared to wheel
+\texttt{covariance[0] = 0.001} ($\sigma\!\approx\!32$~mm/s), visual is 18\,$\times$ tighter
+and dominated fusion 300\,$\times$ over wheel. This explained why Fix 6 (velocity-fusion
+pattern) made things worse instead of better.
+
+\subsection{Live parameter verification (config really loaded?)}
+
+\begin{lstlisting}[language=bash]
+ros2 param get /ekf_filter_node_map odom1_pose_rejection_threshold
+ros2 param get /ekf_filter_node_map odom0_config
+ros2 param get /ekf_filter_node_map process_noise_covariance
+ros2 param get /ekf_filter_node_map sensor_timeout
+ros2 param get /ekf_filter_node_map initial_estimate_covariance
+\end{lstlisting}
+\noindent\textbf{What it gave:} Confirmed yaml edits propagated to the running node and
+ruled out ``stale config'' as a culprit. Without this we would have re-edited yaml
+chasing a bug that was already fixed in the file but not in the live node.
+
+\subsection{Subscription audit (is the node actually fusing what we think?)}
+
+\begin{lstlisting}[language=bash]
+ros2 node info /ekf_filter_node_map | grep -A 10 Subscribers
+\end{lstlisting}
+\noindent\textbf{What it gave:} Confirmed exact set of input topics. Caught the moment when
+removing VO/LO from yaml succeeded (subscriptions dropped), and verified GPS subscription
+remained. Without this, hard to tell if a config change took effect.
+
+\subsection{TF tree inspection --- the breakthrough}
+
+\begin{lstlisting}[language=bash]
+ros2 run tf2_ros tf2_echo map odom
+ros2 run tf2_ros tf2_echo odom base_link
+\end{lstlisting}
+\noindent\textbf{What it gave:} The single output that broke the case open ---
+\texttt{map$\to$odom translation = (-21.306, -1.416, 0)} while
+\texttt{odom$\to$base\_link translation = (0.011, -0.002, 0)}. The 21~m offset existed
+\emph{only} in the EKF~\#2-published transform. Combined with GPS reporting $\sim\!0$ in
+\texttt{frame\_id=odom}, this proved the circular reference loop: navsat output is in
+odom frame, EKF~\#2 transforms it through its own \texttt{map$\to$odom} which is built
+from its own state $\to$ self-consistent garbage. \textbf{This single command identified
+the root cause after fixes 1--14 had only partially helped.}
+
+\subsection{Topic publish-rate verification}
+
+\begin{lstlisting}[language=bash]
+timeout 8 ros2 topic hz /odometry/gps   # background, kill after window
+timeout 8 ros2 topic hz /odometry/global
+\end{lstlisting}
+\noindent\textbf{What it gave:} GPS publishing at 7~Hz steady (close to configured 10~Hz),
+EKF~\#2 at 35~Hz. Ruled out ``GPS not arriving'' as the cause of EKF~\#2 not snapping to it.
+
+\subsection{Bag-based offline analysis}
+
+\begin{lstlisting}[language=bash]
+# Record full pipeline stationary
+bash /home/anish/Multi-sensor-fusion/record_stationary_pipeline.sh
+
+# Then in notebook:
+jupyter notebook /home/anish/Multi-sensor-fusion/notebooks/pipeline_drift_debug.ipynb
+\end{lstlisting}
+\noindent\textbf{What it gave:} Per-stage drift attribution table that quantified
+\emph{which} stage broke. Section~11 of the notebook auto-flagged hypotheses, e.g.\
+\textit{``EKF~\#2 yaw drift $-22.7^\circ$ vs EKF~\#1 $-0.01^\circ$ $\to$
+$P[x,\theta]$ coupling''} which led to Fix~7 (tighten yaw process noise).
+
+\begin{lstlisting}[language=bash]
+# Quick output extract from a notebook without opening Jupyter
+cat notebooks/pipeline_drift_debug.ipynb | python3 -c "
+import json, sys
+nb = json.load(sys.stdin)
+for i, c in enumerate(nb['cells']):
+    if c.get('outputs'):
+        text = []
+        for o in c['outputs']:
+            if 'text' in o: text.append(''.join(o['text']))
+        if text: print(f'=== CELL {i} ==='); print(''.join(text)[:3000])
+"
+\end{lstlisting}
+\noindent\textbf{What it gave:} CLI access to notebook outputs without GUI. Every
+``re-run notebook, post results'' iteration in the debug loop was driven by this command.
+
+\subsection{Source code archaeology}
+
+\begin{lstlisting}[language=bash]
+# Find all per-sensor params robot_localization actually supports
+grep -hE "declare_parameter|get_parameter" \
+    src/robot_localization/src/ros_filter.cpp \
+    src/robot_localization/src/navsat_transform.cpp \
+  | grep -oE '"[a-z_0-9]+"' | sort -u
+
+# Verify navsat-specific params
+grep -rn "broadcast_cartesian_transform_as_parent_frame" \
+    src/robot_localization/src/ src/robot_localization/include/
+\end{lstlisting}
+\noindent\textbf{What it gave:} Confirmed every yaml param we used is supported (no silent
+typos). Caught that \texttt{odomN\_nodelay}, \texttt{odomN\_pose\_covariance\_diagonal} from
+\texttt{dual\_ekf\_navsat.yaml} are \emph{not} declared and silently ignored.
+
+\subsection{URDF / world / plugin survey}
+
+\begin{lstlisting}[language=bash]
+# Find every place GPS noise is configured
+find src -type f \( -name "*.urdf" -o -name "*.world" -o -name "*.sdf" \) \
+  | xargs grep -l -i "gps\|navsat" 2>/dev/null
+
+grep -n -A 30 'sensor name="imu_sensor"' \
+  src/husarion_ugv_description/urdf/lynx_simple.urdf
+
+# Search for available Gazebo NavSat plugins
+apt-cache search rtk gnss | grep -iE "gz|gazebo"
+find /usr/lib -name "*navsat*" -o -name "*rtk*" 2>/dev/null
+\end{lstlisting}
+\noindent\textbf{What it gave:} Located \texttt{<bias\_mean>0.1</bias\_mean>} on accel ---
+the second-biggest single bug after the circular reference. Also confirmed Gazebo Harmonic
+ships only basic NavSat (no RTK plugin); RTK was simulated via tightened URDF stddev.
+
+\subsection{Build / launch}
+
+\begin{lstlisting}[language=bash]
+# Apply yaml/urdf/launch changes
+colcon build --packages-select husarion_ugv_description --symlink-install
+
+# Verify install picked up changes
+grep -E "GPS_VAR|stddev>9.0e-8|bias_mean>0.0" \
+  install/husarion_ugv_description/lib/.../gps_covariance_relay.py \
+  install/husarion_ugv_description/share/.../lynx_simple.urdf
+
+# Restart everything
+ros2 launch husarion_ugv_description baseline_ekf.launch.py
+\end{lstlisting}
+\noindent\textbf{What it gave:} The \texttt{install/} grep was crucial during early fixes
+when relay edits weren't propagating without symlink-install --- it caught the
+``edited source but install/ still has old values'' trap.
+
+\subsection{Summary --- the three commands that mattered most}
+
+\begin{enumerate}[noitemsep]
+\item \texttt{ros2 topic echo /odometry/global --once} (full message, not just position)
+      $\to$ revealed $v_y\!=\!7.33$~m/s hidden in twist field.
+\item \texttt{ros2 run tf2\_ros tf2\_echo map odom} $\to$ exposed the 21~m TF offset that
+      proved circular reference.
+\item \texttt{ros2 param get /ekf\_filter\_node\_map process\_noise\_covariance} $\to$
+      ruled out config-reload bugs every iteration.
+\end{enumerate}
+
+\noindent
+The notebook produced macro-level drift attribution; live ROS~2 commands produced the
+micro-level state inspection that pinpointed each bug. Both halves were necessary ---
+neither alone would have found the circular reference.
+
+\section{Files Changed}
+
+\begin{itemize}[noitemsep]
+\item \texttt{src/husarion\_ugv\_description/urdf/lynx\_simple.urdf} --- IMU + GPS noise
+\item \texttt{src/husarion\_ugv\_description/scripts/gps\_covariance\_relay.py} --- relay variance
+\item \texttt{src/husarion\_ugv\_description/config/baseline\_ekf.yaml} --- EKF~\#2 fusion matrix + Q
+\item \texttt{src/husarion\_ugv\_description/launch/baseline\_ekf.launch.py} --- navsat input remap
+\end{itemize}
+
+\noindent
+Diagnostic: \texttt{notebooks/pipeline\_drift\_debug.ipynb}, \texttt{record\_stationary\_pipeline.sh}.
+
+\end{document}

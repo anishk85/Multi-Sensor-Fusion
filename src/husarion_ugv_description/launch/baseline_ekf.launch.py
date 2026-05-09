@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 # =============================================================================
-#  Baseline EKF Launch File (NO Quantum Filter)
+#  Baseline launch
 #
-#  Startup sequence (event-driven, topic-gated):
-#    Stage 0  t=0       gz_lynx + gate_sensors (starts polling immediately)
-#    Stage 1  gate_A→   odom_sources + gps_relay + imu_relay + gate_relays
-#    Stage 2  gate_B→   ekf_local + ekf_map + gate_ekf
-#    Stage 3  gate_C→   navsat_transform
+#  how it start up:
+#    stage 0: gazebo and wait for sensor
+#    stage 1: start odom and relay
+#    stage 2: start ekf
+#    stage 3: start navsat
 #
-#  Each gate polls `ros2 topic list` every second.
-#  On timeout  → exit 1 → EmitEvent(Shutdown)  [KILL launch]
-#  On success  → exit 0 → next stage starts
-#
-#  Usage:
-#    ros2 launch husarion_ugv_description baseline_ekf.launch.py
+#  gate look at topic. if no topic, it die.
 # =============================================================================
 
 import os
@@ -132,8 +127,8 @@ def generate_launch_description():
         }.items(),
     )
 
-    # /scan does NOT exist — bridge publishes PointCloud2 on /lidar/points.
-    # /diff_drive_controller/odom appears after controller spawner finishes.
+    # /scan no exist, use PointCloud2.
+    # wheel odom come later.
     gate_sensors = make_topic_gate(
         "gate_sensors",
         ["/imu/data", "/lidar/points", "/diff_drive_controller/odom"],
@@ -197,8 +192,7 @@ def generate_launch_description():
         remappings=[("odometry/filtered", "odometry/global")],
     )
 
-    # extra_wait_s=5: EKF needs a few seconds of IMU+wheel data to converge
-    # dead-reckoning before navsat reads odometry/local for its heading datum.
+    # wait 5s so EKF have time to think before navsat use it.
     gate_ekf = make_topic_gate(
         "gate_ekf",
         ["/odometry/local"],
@@ -209,9 +203,9 @@ def generate_launch_description():
     # =========================================================================
     # Stage 3: NavSat Transform
     # =========================================================================
-    # Remapped to odometry/local (EKF #1, no GPS) — NOT odometry/global.
-    # odometry/global creates EKF#2 → navsat → GPS → EKF#2 circular feedback:
-    # EKF#2 heading error rotates GPS datum → wrong GPS corrections → more drift.
+    # navsat reads EKF#2 (global/map frame) so /odometry/gps is published in map frame.
+    # Previous setup with EKF#1 (odom) caused circular reference: GPS in odom → EKF#2
+    # transforms via own map→odom → self-consistent garbage, GPS never corrects.
     navsat = Node(
         package="robot_localization",
         executable="navsat_transform_node",
@@ -221,7 +215,7 @@ def generate_launch_description():
         remappings=[
             ("imu",               "imu/data/covariance_fixed"),
             ("gps/fix",           "gps/fix/covariance_fixed"),
-            ("odometry/filtered", "odometry/local"),
+            ("odometry/filtered", "odometry/global"),
         ],
     )
 

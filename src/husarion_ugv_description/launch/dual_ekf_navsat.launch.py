@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
 # =============================================================================
-#  Dual EKF + NavSat Fusion Launch File for Husarion Lynx
+#  Dual launch
 #
-#  This launch file brings up:
-#    1. Gazebo sim + robot + bridges + controllers      (includes gz_lynx.launch.py)
-#    2. EKF #1 — local odom filter    (odom → base_link)
-#    3. EKF #2 — global map filter    (map → odom, fuses GPS)
-#    4. navsat_transform_node          (GPS lat/lon → local x,y)
-#
-#  Usage:
-#    ros2 launch husarion_ugv_description dual_ekf_navsat.launch.py
-#    ros2 launch husarion_ugv_description dual_ekf_navsat.launch.py world:=/path/to/world.sdf
+#  start:
+#    1. gazebo
+#    2. ekf 1 local
+#    3. ekf 2 map
+#    4. navsat
 # =============================================================================
 
 import os
@@ -27,7 +23,7 @@ def generate_launch_description():
 
     ekf_config = os.path.join(pkg, "config", "dual_ekf_navsat.yaml")
 
-    # ---- Include the base Gazebo launch (sim + robot + bridges + controllers) ----
+    # start gazebo
     gz_lynx = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg, "launch", "gz_lynx.launch.py")
@@ -39,10 +35,8 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ---- EKF #1: Local Odometry Filter ----
-    # Publishes: odom → base_link (smooth, no GPS jumps)
-    # Fuses: wheel odom velocities + IMU
-    # Delayed 8s to let controllers start first (they start at 5-6s)
+    # EKF 1: local
+    # wait 8s for controller to start.
     ekf_odom = TimerAction(
         period=8.0,
         actions=[
@@ -59,9 +53,7 @@ def generate_launch_description():
         ],
     )
 
-    # ---- EKF #2: Global Map Filter ----
-    # Publishes: map → odom (globally corrected using GPS)
-    # Fuses: wheel odom velocities + IMU + GPS position from navsat
+    # EKF 2: map
     ekf_map = TimerAction(
         period=8.0,
         actions=[
@@ -78,11 +70,8 @@ def generate_launch_description():
         ],
     )
 
-    # ---- NavSat Transform ----
-    # Converts GPS lat/lon → local XY odometry
-    # Subscribes to: /gps/fix, /imu/data, /odometry/global (EKF #2 output)
-    # Publishes: /odometry/gps (fed to EKF #2)
-    # Delayed 11s to let EKFs initialize first (handles the "circular" dependency)
+    # navsat
+    # wait 11s for EKF to think.
     navsat = TimerAction(
         period=11.0,
         actions=[

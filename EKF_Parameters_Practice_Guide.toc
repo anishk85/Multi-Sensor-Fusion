@@ -1,0 +1,42 @@
+\contentsline {section}{\numberline {1}The Three EKFs in this Project}{2}{section.1}%
+\contentsline {section}{\numberline {2}State Vector Refresher}{2}{section.2}%
+\contentsline {section}{\numberline {3}Frame Parameters}{3}{section.3}%
+\contentsline {section}{\numberline {4}Timing Parameters}{4}{section.4}%
+\contentsline {section}{\numberline {5}Mode Parameters}{5}{section.5}%
+\contentsline {section}{\numberline {6}Sensor Input Configuration}{6}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Topic Name (\texttt {odomN}, \texttt {imuN}, \texttt {poseN}, \texttt {twistN})}{7}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}15-Bit Configuration Array}{7}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Differential Mode}{8}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Queue and Latency}{9}{subsection.6.4}%
+\contentsline {section}{\numberline {7}Measurement Rejection Thresholds}{9}{section.7}%
+\contentsline {section}{\numberline {8}Process Noise Covariance $R_t$}{10}{section.8}%
+\contentsline {section}{\numberline {9}Initial Estimate Covariance $\Sigma _0$}{12}{section.9}%
+\contentsline {section}{\numberline {10}Control Input Parameters (Local EKF Only)}{13}{section.10}%
+\contentsline {section}{\numberline {11}Why GPS is Excluded from EKF \#2 (Covariance Cross-Term Leak)}{14}{section.11}%
+\contentsline {subsection}{\numberline {11.1}The Cross-Covariance Problem}{14}{subsection.11.1}%
+\contentsline {subsection}{\numberline {11.2}The Leak Path}{14}{subsection.11.2}%
+\contentsline {subsection}{\numberline {11.3}Numerical Example (Project Values)}{15}{subsection.11.3}%
+\contentsline {subsection}{\numberline {11.4}Compounding via VO/LiDAR}{15}{subsection.11.4}%
+\contentsline {subsection}{\numberline {11.5}Why the Canonical Tutorial Doesn't Suffer}{15}{subsection.11.5}%
+\contentsline {subsection}{\numberline {11.6}The Sensor Consensus Solution}{16}{subsection.11.6}%
+\contentsline {subsection}{\numberline {11.7}Trade-Off}{16}{subsection.11.7}%
+\contentsline {subsection}{\numberline {11.8}If You Need Global Anchoring Back}{16}{subsection.11.8}%
+\contentsline {subsection}{\numberline {11.9}Where to Look in YAML}{16}{subsection.11.9}%
+\contentsline {section}{\numberline {12}NavSat Transform Parameters}{18}{section.12}%
+\contentsline {section}{\numberline {13}Per-Sensor Covariance Override}{20}{section.13}%
+\contentsline {section}{\numberline {14}IMU-Specific Parameters}{20}{section.14}%
+\contentsline {section}{\numberline {15}The Big Picture: How Parameters Compose}{21}{section.15}%
+\contentsline {subsection}{\numberline {15.1}Causal Chain --- One Update Cycle}{21}{subsection.15.1}%
+\contentsline {subsection}{\numberline {15.2}The Trust Triangle}{22}{subsection.15.2}%
+\contentsline {subsection}{\numberline {15.3}Why EKF \#1 and EKF \#2 Have Different $R_t$}{22}{subsection.15.3}%
+\contentsline {section}{\numberline {16}Tuning Workflow}{22}{section.16}%
+\contentsline {subsection}{\numberline {16.1}Initial Sanity Check}{22}{subsection.16.1}%
+\contentsline {subsection}{\numberline {16.2}Stationary Test}{23}{subsection.16.2}%
+\contentsline {subsection}{\numberline {16.3}Straight-Line Test}{23}{subsection.16.3}%
+\contentsline {subsection}{\numberline {16.4}Turn-in-Place Test}{23}{subsection.16.4}%
+\contentsline {subsection}{\numberline {16.5}NIS Validation}{23}{subsection.16.5}%
+\contentsline {subsection}{\numberline {16.6}Common Failure Diagnoses}{23}{subsection.16.6}%
+\contentsline {section}{\numberline {17}Quick Reference Tables}{24}{section.17}%
+\contentsline {subsection}{\numberline {17.1}All Parameters at a Glance}{24}{subsection.17.1}%
+\contentsline {subsection}{\numberline {17.2}Project Configuration Summary --- Side-by-Side}{25}{subsection.17.2}%
+\contentsline {section}{Closing Notes}{25}{section*.2}%

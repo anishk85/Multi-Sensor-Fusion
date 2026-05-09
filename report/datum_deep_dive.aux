@@ -1,0 +1,76 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}The Big Picture: What Problem Are We Solving?}{3}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Step 1: The Gazebo World Defines ``Where on Earth''}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Spherical Coordinates in \texttt  {agriculture.world}}{3}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}How the NavSat Sensor Generates GPS Readings}{4}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Step 2: From Lat/Lon to Local XY Meters}{4}{section.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}The UTM Projection}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces How GPS lat/lon becomes local $(x, y)$ in meters. The UTM projection flattens the curved Earth surface, and subtracting the first GPS fix makes everything relative to the robot's starting position.}}{5}{figure.1}\protected@file@percent }
+\newlabel{fig:utm}{{1}{5}{How GPS lat/lon becomes local $(x, y)$ in meters. The UTM projection flattens the curved Earth surface, and subtracting the first GPS fix makes everything relative to the robot's starting position}{figure.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}The First-Fix Datum: Where Is (0, 0)?}{5}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Step 3: Heading Alignment---Which Way Is ``Forward''?}{6}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Why Not Use IMU Yaw Directly?}{6}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}How \texttt  {use\_odometry\_yaw: true} Solves This}{6}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Step 4: The Three Coordinate Frames}{7}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The three coordinate frames in the ROS\,2 TF tree. The \texttt  {map} frame is fixed, \texttt  {odom} drifts smoothly, and \texttt  {base\_link} moves with the robot. Two EKFs each publish one transform in this chain.}}{7}{figure.2}\protected@file@percent }
+\newlabel{fig:frames}{{2}{7}{The three coordinate frames in the ROS\,2 TF tree. The \texttt {map} frame is fixed, \texttt {odom} drifts smoothly, and \texttt {base\_link} moves with the robot. Two EKFs each publish one transform in this chain}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Frame Definitions}{7}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Who Publishes What}{8}{subsection.5.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Transform responsibilities in the dual-EKF architecture.}}{8}{table.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Step 5: 2D Mode---Projecting to the Ground Plane}{9}{section.6}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces The \texttt  {two\_d\_mode: true} setting reduces the 15-element state vector to an effective 6-DOF planar state. Greyed/crossed elements are zeroed at each prediction step.}}{9}{figure.3}\protected@file@percent }
+\newlabel{fig:2dmode}{{3}{9}{The \texttt {two\_d\_mode: true} setting reduces the 15-element state vector to an effective 6-DOF planar state. Greyed/crossed elements are zeroed at each prediction step}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}The Full 15-Element State}{9}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}What \texttt  {two\_d\_mode: true} Actually Does}{9}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Step 6: Why GPS Is Excluded from EKF\,\#2}{10}{section.7}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces The GPS position--yaw covariance coupling problem. GPS corrections build off-diagonal $\mathbf  {P}_{x\theta }$ terms that leak into yaw when VO or LiDAR updates are applied, causing sustained map-frame rotation at $\sim $3.56$^\circ $/s.}}{11}{figure.4}\protected@file@percent }
+\newlabel{fig:yawcoupling}{{4}{11}{The GPS position--yaw covariance coupling problem. GPS corrections build off-diagonal $\mathbf {P}_{x\theta }$ terms that leak into yaw when VO or LiDAR updates are applied, causing sustained map-frame rotation at $\sim $3.56$^\circ $/s}{figure.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}The Covariance Cross-Term Problem}{11}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}The Solution: Sensor Consensus}{11}{subsection.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Step 7: The Complete Data Flow}{12}{section.8}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The complete GPS datum projection pipeline from Gazebo world coordinates through the ROS\,2 processing chain.}}{12}{figure.5}\protected@file@percent }
+\newlabel{fig:pipeline}{{5}{12}{The complete GPS datum projection pipeline from Gazebo world coordinates through the ROS\,2 processing chain}{figure.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Step 8: The TF Frame Hierarchy}{13}{section.9}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces The ROS\,2 TF frame hierarchy showing which node publishes each transform, and how the navsat\_transform node feeds into (but is excluded from) EKF\,\#2.}}{13}{figure.6}\protected@file@percent }
+\newlabel{fig:tfhierarchy}{{6}{13}{The ROS\,2 TF frame hierarchy showing which node publishes each transform, and how the navsat\_transform node feeds into (but is excluded from) EKF\,\#2}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1}Initial Covariance: The $10^{-9}$ Lock}{13}{subsection.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}RTAB-Map Visual Odometry (RGB-D)}{14}{section.10}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces RTAB-Map RGB-D visual odometry pipeline. The RealSense D435 provides synchronized color and depth images. GFTT features are detected, matched across frames, and a PnP solver recovers the 6-DOF camera motion.}}{14}{figure.7}\protected@file@percent }
+\newlabel{fig:vo_pipeline}{{7}{14}{RTAB-Map RGB-D visual odometry pipeline. The RealSense D435 provides synchronized color and depth images. GFTT features are detected, matched across frames, and a PnP solver recovers the 6-DOF camera motion}{figure.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.1}Inputs}{14}{subsection.10.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.2}How It Works (Step by Step)}{14}{subsection.10.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {10.3}Output}{15}{subsection.10.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {11}RTAB-Map ICP LiDAR Odometry}{15}{section.11}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces RTAB-Map ICP LiDAR odometry pipeline. Point clouds from the VLP-16 are voxel-downsampled, then aligned to the previous scan using point-to-plane ICP to recover 6-DOF motion.}}{16}{figure.8}\protected@file@percent }
+\newlabel{fig:icp_pipeline}{{8}{16}{RTAB-Map ICP LiDAR odometry pipeline. Point clouds from the VLP-16 are voxel-downsampled, then aligned to the previous scan using point-to-plane ICP to recover 6-DOF motion}{figure.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.1}Inputs}{16}{subsection.11.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.2}How It Works (Step by Step)}{16}{subsection.11.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.3}Output}{17}{subsection.11.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {11.4}Visual Odom vs.\ LiDAR Odom: Key Differences}{17}{subsection.11.4}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Comparison of the two RTAB-Map odometry sources.}}{17}{table.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {12}How the EKF Consumes Odometry: Differential Mode}{17}{section.12}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Differential mode converts absolute poses to increments before EKF fusion. This protects against VO/LiDAR resets corrupting the state estimate.}}{18}{figure.9}\protected@file@percent }
+\newlabel{fig:differential}{{9}{18}{Differential mode converts absolute poses to increments before EKF fusion. This protects against VO/LiDAR resets corrupting the state estimate}{figure.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {13}The Sensor Selection Matrix}{18}{section.13}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Which state variables each sensor contributes to the EKF. Green = used, grey = ignored. Note: VO provides no yaw (erratic on agriculture terrain), while LiDAR provides yaw (reliable 360$^\circ $ ICP heading).}}{19}{figure.10}\protected@file@percent }
+\newlabel{fig:sensormatrix}{{10}{19}{Which state variables each sensor contributes to the EKF. Green = used, grey = ignored. Note: VO provides no yaw (erratic on agriculture terrain), while LiDAR provides yaw (reliable 360$^\circ $ ICP heading)}{figure.10}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {14}Summary: Your Config Decisions at a Glance}{20}{section.14}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces All datum and frame-related configuration decisions.}}{20}{table.3}\protected@file@percent }
+\gdef \@abspage@last{20}

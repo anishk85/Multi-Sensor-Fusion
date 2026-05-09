@@ -24,7 +24,7 @@ def generate_launch_description():
             description="Use simulation time"
         ),
 
-        # Publishes the robot URDF and broadcasts the TF tree
+        # publish robot body
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
@@ -35,14 +35,14 @@ def generate_launch_description():
             }],
         ),
 
-        # GUI with sliders to manually set wheel joint positions
+        # small window to move wheel
         Node(
             package="joint_state_publisher_gui",
             executable="joint_state_publisher_gui",
             output="screen",
         ),
 
-        # RViz with a pre-built config showing the robot model and TF
+        # rviz start
         Node(
             package="rviz2",
             executable="rviz2",

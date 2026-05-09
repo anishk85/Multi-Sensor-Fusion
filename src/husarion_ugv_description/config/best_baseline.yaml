@@ -163,33 +163,40 @@ ekf_filter_node_map:
     base_link_frame: base_link
     world_frame: map
 
-    # --- Wheel Odometry (velocities only — vx, vy, ωz) ---
-    # vy ENABLED here (row 8) even though wheel encoder doesn't measure it directly:
-    # diff_drive_controller publishes vy=0 with cov=0.001 (kinematic constraint, σ=0.032 m/s).
-    # Without this, EKF#2 vy state floated free and integrated to 7+ m/s → 18m Y drift.
+    # --- Wheel Odometry (velocities only) ---
     odom0: /diff_drive_controller/odom
     odom0_config: [false, false, false,
                    false, false, false,
-                   true,  true,  false,
+                   true,  false, false,
                    false, false, true,
                    false, false, false]
     odom0_queue_size: 10
     odom0_differential: false
     odom0_relative: false
 
-    # --- LiDAR Odometry (YAW ABSOLUTE only, differential mode) ---
-    # ICP yaw is the only absolute yaw anchor in EKF#2. Without it, yaw walks at 0.16°/s
-    # via gyro bias integration → world-frame position drifts even when body twist is zero.
-    # Differential mode: EKF takes Δyaw between LO samples (immune to ICP absolute offset).
-    # Position rows DISABLED — fusing LO position deltas caused 4m drift earlier (noisy).
-    # Velocity rows DISABLED — LO twist cov=7e-5 unrealistically tight (overtrusts).
+    # --- Visual Odometry (position only, no yaw) ---
+    # KEPT in EKF#2: removing it caused yaw to walk freely (-238° in 58s, notebook test).
+    # VO position deltas anchor EKF#2 against pure IMU integration drift.
+    odom1: /odometry/visual
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_queue_size: 10
+    odom1_differential: true
+    odom1_relative: false
+    odom1_pose_rejection_threshold: 1.5
+
+    # --- LiDAR Odometry (position + yaw) ---
+    # KEPT in EKF#2: ICP yaw is the absolute yaw anchor preventing P[x,θ] runaway.
     odom2: /odometry/lidar
-    odom2_config: [false, false, false,
+    odom2_config: [true,  true,  false,
                    false, false, true,
                    false, false, false,
                    false, false, false,
                    false, false, false]
-    odom2_queue_size: 2
+    odom2_queue_size: 10
     odom2_differential: true
     odom2_relative: false
     odom2_pose_rejection_threshold: 3.0
@@ -205,7 +212,7 @@ ekf_filter_node_map:
                   false, false, false,
                   true,  true,  true,
                   false, false, false]
-    imu0_differential: false
+    imu0_differential: true
     imu0_relative: false
     imu0_queue_size: 10
     imu0_remove_gravitational_acceleration: true
@@ -216,40 +223,35 @@ ekf_filter_node_map:
     # --- GPS Odometry (from navsat_transform) ---
     # x,y position only — GPS gives no orientation.
     # RTK-grade noise (σ≈1cm). Rejection threshold 3.0σ.
-    odom1: /odometry/gps
-    odom1_config: [true,  true,  false,
+    odom3: /odometry/gps
+    odom3_config: [true,  true,  false,
                    false, false, false,
                    false, false, false,
                    false, false, false,
                    false, false, false]
-    odom1_queue_size: 10
-    odom1_differential: false
-    odom1_relative: false
-    # Threshold raised 3.0 → 100: with tight x,y P, even small drifts get rejected.
-    # Effectively no rejection — trust RTK GPS always (σ=1cm so outliers physically impossible).
-    odom1_pose_rejection_threshold: 100.0
+    odom3_queue_size: 10
+    odom3_differential: false
+    odom3_relative: false
+    odom3_pose_rejection_threshold: 3.0
 
     use_control: false
 
-    # Process noise tuned for velocity-fusion pattern + RTK GPS:
-    #   x,y     = 0.05   moderate — P grows enough to accept GPS but not explode pre-GPS.
-    #                    rejection_threshold=100 carries the load (trust RTK always).
-    #   yaw     = 0.001  TIGHT — lock orientation. Loose yaw lets GPS x,y pull yaw via
-    #                    P[yaw,x] cross-cov → 22° walk while stationary.
-    #   vx,vy   = 0.001  TIGHT — non-holonomic constraint, velocity ≡ 0 unless commanded
-    #   vyaw    = 0.001  TIGHT — same reason as yaw
-    process_noise_covariance: [0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.05,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+    # Process noise — x,y 0.025: trusts dead-reckoning between GPS fixes → smooth map frame.
+    # vx,vy 0.001: TIGHT — diff-drive is non-holonomic, vy ≡ 0 always. Loose vy (was 0.05) lets
+    # filter believe vy can wander → vy state runs away → 14m Y-drift while stationary.
+    # Lock vy near 0; force filter to attribute apparent motion to noise not real velocity.
+    process_noise_covariance: [0.025,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.025,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.03,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.0,    0.0,    0.0,    0.0,    0.001,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.06,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.001,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.001,  0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.04,   0.0,    0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,    0.0,    0.0,
-                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.001,  0.0,    0.0,    0.0,
+                               0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.02,   0.0,    0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,    0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.01,   0.0,
                                0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.0,    0.015]
